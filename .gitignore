@@ -27,6 +27,9 @@ render.experimental.xml
 *.jks
 *.keystore
 
+# also Keystore files
+gradle.properties
+
 # Google Services (e.g. APIs or Firebase)
 google-services.json
 
