@@ -4,7 +4,6 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  // 触发重编译
 
 
   // 全局校验管道：所有 DTO 自动做类型与规则校验，非法请求直接 400

@@ -19,12 +19,8 @@ export class UsersService {
   async list() {
     const users = await this.prisma.user.findMany({
       orderBy: { id: 'asc' },
-      include: { _count: { select: { progress: true } } },
     });
-    return users.map(({ _count, ...u }) => ({
-      ...this.auth.toPublic(u),
-      hasRead: _count.progress > 0,
-    }));
+    return users.map((u) => this.auth.toPublic(u));
   }
 
   async create(dto: CreateUserDto) {
