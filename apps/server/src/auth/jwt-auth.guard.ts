@@ -14,12 +14,6 @@ export interface RequestUser {
   isAdmin: boolean;
 }
 
-declare module 'express' {
-  interface Request {
-    user?: RequestUser;
-  }
-}
-
 /**
  * 登录守卫：校验 Authorization: Bearer <token>，
  * 通过后把用户信息挂到 request.user 上。

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProgressDto } from './dto/update-progress.dto';
 
@@ -22,6 +26,10 @@ export class ProgressService {
       dto.totalPages > 0
         ? Math.min(100, Math.round((dto.currentPage / dto.totalPages) * 1000) / 10)
         : 0;
+
+    if (dto.currentPage > dto.totalPages) {
+      throw new BadRequestException('当前页不能大于总页数');
+    }
 
     const progress = await this.prisma.readingProgress.upsert({
       where: { userId_bookId: { userId, bookId: dto.bookId } },

@@ -35,10 +35,11 @@ export class AuthService {
     };
   }
 
-  /** 由 JWT payload 反查用户，供守卫使用 */
+  /** 由 JWT payload 反查用户，供守卫使用。只取必要字段，不碰凭证 */
   async verifyPayload(payload: { sub: number }) {
     return this.prisma.user.findUnique({
       where: { id: payload.sub },
+      select: { id: true, username: true, isAdmin: true, isActive: true },
     });
   }
 

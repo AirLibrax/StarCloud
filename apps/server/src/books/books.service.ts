@@ -75,7 +75,7 @@ export class BooksService {
   }
 
   /** 管理员删除：同时清掉磁盘上的文件 */
-  async remove(id: number, requester: RequestUserLike) {
+  async remove(id: number) {
     const book = await this.mustGetBook(id);
     await this.prisma.book.delete({ where: { id } });
     if (existsSync(book.filePath)) {
@@ -102,9 +102,4 @@ export class BooksService {
     if (!book) throw new NotFoundException('书籍不存在');
     return book;
   }
-}
-
-interface RequestUserLike {
-  id: number;
-  isAdmin: boolean;
 }

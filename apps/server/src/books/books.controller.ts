@@ -21,7 +21,8 @@ import { CreateBookDto } from './dto/create-book.dto';
 import { JwtAuthGuard, RequestUser } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 
-const UPLOAD_DIR = resolve(process.cwd(), 'uploads');
+// 锚定编译产物位置：dist/books -> 上两级 = apps/server，避免受启动时工作目录影响
+const UPLOAD_DIR = resolve(__dirname, '..', '..', 'uploads');
 
 @Controller('api/books')
 @UseGuards(JwtAuthGuard) // 整个模块都要求登录
@@ -42,7 +43,8 @@ export class BooksController {
   async download(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
     const file = await this.books.getFile(id);
     res.setHeader('Content-Type', file.contentType);
-    res.download(file.path, encodeURIComponent(file.filename));
+    // res.download 内部会按 RFC 5987 自动处理非 ASCII 文件名，不要再手动编码
+    res.download(file.path, file.filename);
   }
 
   /** 仅管理员可上传。multipart 里文件字段名固定为 "file" */
@@ -73,7 +75,7 @@ export class BooksController {
   /** 仅管理员可删除 */
   @Delete(':id')
   @UseGuards(AdminGuard)
-  remove(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
-    return this.books.remove(id, req.user as RequestUser);
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.books.remove(id);
   }
 }
