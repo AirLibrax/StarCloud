@@ -3,6 +3,20 @@ import type { LoginResponse } from '@starcloud/shared';
 const TOKEN_KEY = 'starcloud.token';
 const USER_KEY = 'starcloud.user';
 
+/**
+ * 后端地址。
+ * - 网页版：默认同源（dev 由 Vite 代理转发，生产与后端同域部署）
+ * - App 版：在设置里填服务器地址后存入 localStorage 即可切换
+ */
+export function getServerUrl(): string {
+  return (localStorage.getItem('starcloud.serverUrl') ?? '').replace(/\/+$/, '');
+}
+export function setServerUrl(url: string) {
+  const v = url.trim().replace(/\/+$/, '');
+  if (v) localStorage.setItem('starcloud.serverUrl', v);
+  else localStorage.removeItem('starcloud.serverUrl');
+}
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -39,7 +53,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(path, { ...init, headers });
+  const res = await fetch(getServerUrl() + path, { ...init, headers });
 
   if (res.status === 401) {
     clearSession();

@@ -128,15 +128,18 @@ export default function ReaderPage() {
 
   return (
     <div className="reader-page">
-      <header className="reader-topbar">
-        <Link to="/" className="btn">
-          ← 书架
-        </Link>
-        <div className="reader-title">{book?.title ?? '…'}</div>
-        <div className="reader-progress">
-          {progress ? `${progress.percentage}%` : ''}
-        </div>
-      </header>
+      {/* EPUB 由渲染器自带完整顶栏，其余格式用通用顶栏 */}
+      {book?.fileType !== 'epub' && (
+        <header className="reader-topbar">
+          <Link to="/" className="btn">
+            ← 书架
+          </Link>
+          <div className="reader-title">{book?.title ?? '…'}</div>
+          <div className="reader-progress">
+            {progress ? `${progress.percentage}%` : ''}
+          </div>
+        </header>
+      )}
 
       {!book && <p className="hint">加载中…</p>}
 

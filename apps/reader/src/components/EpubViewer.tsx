@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import ePub from 'epubjs';
 import { getToken } from '../api/client';
 
@@ -16,11 +17,10 @@ interface Props {
  */
 const FONT_STEPS = [80, 90, 100, 110, 125, 140, 160, 180];
 
-/** 排版模式：auto 随屏宽自动单/双列，none 强制单列，always 强制双列 */
-const SPREAD_MODES = ['auto', 'none', 'always'] as const;
+/** 排版模式：单列 / 双列 二选一 */
+const SPREAD_MODES = ['none', 'always'] as const;
 type SpreadMode = (typeof SPREAD_MODES)[number];
 const MODE_LABEL: Record<SpreadMode, string> = {
-  auto: '自动',
   none: '单列',
   always: '双列',
 };
@@ -53,15 +53,12 @@ export default function EpubViewer({
   });
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
 
-  /** 排版模式偏好持久化到 localStorage */
-  const spreadRef = useRef<SpreadMode>(
-    ((['auto', 'none', 'always'] as const).find(
-      (m) => m === localStorage.getItem('starcloud.spread'),
-    ) ?? 'auto') as SpreadMode,
-  );
-  const [spreadLabel, setSpreadLabel] = useState(
-    MODE_LABEL[spreadRef.current],
-  );
+  /** 排版模式偏好持久化到 localStorage（旧值 auto 归入单列） */
+  const savedSpread = localStorage.getItem('starcloud.spread') as SpreadMode | null;
+  const initialSpread: SpreadMode =
+    savedSpread === 'always' ? 'always' : 'none';
+  const spreadRef = useRef<SpreadMode>(initialSpread);
+  const [spreadLabel, setSpreadLabel] = useState(MODE_LABEL[initialSpread]);
 
   /** 字号与键盘处理器的 ref：初始化 effect 只跑一次，
    *  通过 ref 让回调始终拿到最新值，而不触发渲染器重建 */
@@ -241,14 +238,13 @@ export default function EpubViewer({
   return (
     <div className="epub-viewer" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <div className="epub-toolbar">
-        <button
-          className="btn"
-          disabled={!ready || stepIndex === 0}
-          onClick={() => setStepIndex(Math.max(0, stepIndex - 1))}
-        >
-          A-
-        </button>
-        <span className="reader-progress">
+        <div className="toolbar-left">
+          <Link to="/" className="btn">← 书架</Link>
+          <button className="btn" onClick={() => switchSpread()} disabled={!ready}>
+            {spreadLabel}
+          </button>
+        </div>
+        <span className="reader-progress reader-center">
           {loadError ??
             (!ready
               ? '打开中…'
@@ -256,20 +252,22 @@ export default function EpubViewer({
                 ? `${chapter.current}/${chapter.total} 章 · 第${stepIndex + 1}档`
                 : '')}
         </span>
-        <button
-          className="btn"
-          onClick={() => switchSpread()}
-          disabled={!ready}
-        >
-          {spreadLabel}
-        </button>
-        <button
-          className="btn"
-          disabled={!ready || stepIndex === FONT_STEPS.length - 1}
-          onClick={() => setStepIndex(Math.min(FONT_STEPS.length - 1, stepIndex + 1))}
-        >
-          A+
-        </button>
+        <div className="toolbar-right">
+          <button
+            className="btn"
+            disabled={!ready || stepIndex === 0}
+            onClick={() => setStepIndex(Math.max(0, stepIndex - 1))}
+          >
+            A-
+          </button>
+          <button
+            className="btn"
+            disabled={!ready || stepIndex === FONT_STEPS.length - 1}
+            onClick={() => setStepIndex(Math.min(FONT_STEPS.length - 1, stepIndex + 1))}
+          >
+            A+
+          </button>
+        </div>
       </div>
       <div className="epub-container" ref={containerRef} />
     </div>
