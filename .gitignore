@@ -1,40 +1,23 @@
-# Gradle files
-.gradle/
+# 依赖
+node_modules/
+
+# 编译产物
+dist/
 build/
+.expo/
 
-# Local configuration file (sdk path, etc)
-local.properties
+# 环境与密钥
+.env
+.env.local
 
-# Log/OS Files
+# 数据库与上传文件
+*.db
+*.db-journal
+uploads/
+
+# 日志
 *.log
 
-# Android Studio generated files and folders
-captures/
-.externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
-
-# IntelliJ
-*.iml
-.idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
-
-# Keystore files
-*.jks
-*.keystore
-
-# also Keystore files
-gradle.properties
-
-# dependence
-node_modules
-
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
-# Android Profiling
-*.hprof
+# 系统杂项
+.DS_Store
+Thumbs.db

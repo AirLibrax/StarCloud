@@ -1,9 +1,19 @@
 {
-  "dependencies": {
-    "@react-native-async-storage/async-storage": "^2.2.0",
-    "@react-navigation/bottom-tabs": "^7.4.7",
-    "@react-navigation/native": "^7.1.17",
-    "@react-navigation/stack": "^7.4.8",
-    "react-native-vector-icons": "^10.3.0"
+  "name": "starcloud",
+  "version": "2.0.0",
+  "private": true,
+  "description": "星辰云图书馆 - 全栈单体仓",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:server": "npm run start:dev --workspace @starcloud/server",
+    "dev:admin": "npm run dev --workspace @starcloud/admin",
+    "dev:mobile": "npm run start --workspace @starcloud/mobile",
+    "build": "npm run build --workspaces --if-present"
   }
 }
