@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ePub, { type Book as EpubBook, type Rendition } from 'epubjs';
 import { getToken } from '../api/client';
 
+/**
+ * 字号档位（仿 Apple Books）：离散档位而不是任意缩放，
+ * 配合强制相对行高，保证任何档位都不会出现文字被分页边缘裁切
+ */
+const FONT_STEPS = [80, 90, 100, 110, 125, 140, 160, 180];
+
 interface Props {
   bookId: number;
   /** 上次阅读的百分比 0-100，用于恢复位置 */
@@ -23,6 +29,10 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(100);
+  const stepIndex = Math.max(
+    0,
+    FONT_STEPS.indexOf(FONT_STEPS.reduce((best, s) => (Math.abs(s - fontSize) < Math.abs(best - fontSize) ? s : best))),
+  );
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
 
   // 字号与键盘处理器的 ref：初始化 effect 只跑一次，
@@ -85,11 +95,21 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
         localRendition = ebook.renderTo(containerRef.current!, {
           width: '100%',
           height: '100%',
-          spread: 'none', // 手机单页，桌面也不并排
+          spread: 'auto', // 宽屏自动双列，窄屏单列（iPad 式）
+          allowScripted: false,
         });
         renditionRef.current = localRendition;
         localRendition.themes.register('paper', {
-          body: { background: '#fbf7ee' },
+          // 强制相对行高与边距：书籍自带的固定像素行高在放大字号后会
+          // 导致行框超过分页高度而被裁切，这里统一覆盖为相对值
+          body: {
+            background: '#fbf7ee',
+            'line-height': '1.6 !important',
+          },
+          p: {
+            'line-height': '1.6 !important',
+            margin: '0.25em 0 !important',
+          },
         });
         localRendition.themes.select('paper');
         applyFontSize(fontSizeRef.current);
@@ -165,17 +185,25 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
   return (
     <div className="epub-viewer" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <div className="epub-toolbar">
-        <button className="btn" onClick={() => setFontSize((s) => Math.max(70, s - 10))}>
+        <button
+          className="btn"
+          disabled={stepIndex === 0}
+          onClick={() => setFontSize(FONT_STEPS[Math.max(0, stepIndex - 1)])}
+        >
           A-
         </button>
         <span className="reader-progress">
           {loadError
             ? loadError
             : ready && chapter.total > 0
-              ? `${chapter.current}/${chapter.total} 章 · ${fontSize}%`
+              ? `${chapter.current}/${chapter.total} 章 · ${stepIndex + 1}/${FONT_STEPS.length} 档`
               : '打开中…'}
         </span>
-        <button className="btn" onClick={() => setFontSize((s) => Math.min(200, s + 10))}>
+        <button
+          className="btn"
+          disabled={stepIndex === FONT_STEPS.length - 1}
+          onClick={() => setFontSize(FONT_STEPS[Math.min(FONT_STEPS.length - 1, stepIndex + 1)])}
+        >
           A+
         </button>
       </div>
