@@ -17,6 +17,13 @@ interface Props {
  */
 const FONT_STEPS = [80, 90, 100, 110, 125, 140, 160, 180];
 
+/** 行距档位（相对倍数） */
+const LINE_HEIGHTS = [1.4, 1.6, 1.9, 2.2];
+
+/** 左右页边距档位（像素） */
+const MARGINS = [10, 24, 48, 80];
+const MARGIN_LABELS = ['窄', '中', '宽', '很宽'];
+
 /** 排版模式：单列 / 双列 二选一 */
 const SPREAD_MODES = ['none', 'always'] as const;
 type SpreadMode = (typeof SPREAD_MODES)[number];
@@ -53,6 +60,17 @@ export default function EpubViewer({
   });
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
 
+  const readIdx = (key: string, len: number, fallback: number) => {
+    const saved = parseInt(localStorage.getItem(key) ?? '', 10);
+    return Number.isInteger(saved) && saved >= 0 && saved < len ? saved : fallback;
+  };
+  const [lineHeightIdx, setLineHeightIdx] = useState(() =>
+    readIdx('starcloud.lineHeight', LINE_HEIGHTS.length, 1),
+  );
+  const [marginIdx, setMarginIdx] = useState(() =>
+    readIdx('starcloud.margin', MARGINS.length, 1),
+  );
+
   /** 排版模式偏好持久化到 localStorage（旧值 auto 归入单列） */
   const savedSpread = localStorage.getItem('starcloud.spread') as SpreadMode | null;
   const initialSpread: SpreadMode =
@@ -83,6 +101,28 @@ export default function EpubViewer({
       }
     } catch {
       // 个别章节文档尚未就绪时忽略，翻页后会重放
+    }
+  }, []);
+
+  const lineHeightRef = useRef(LINE_HEIGHTS[lineHeightIdx]);
+
+  /** 向每个章节 iframe 文档注入行距（带 !important 压过书籍自带样式） */
+  const applyLineHeight = useCallback(() => {
+    const lh = lineHeightRef.current;
+    try {
+      for (const c of renditionRef.current?.getContents() ?? []) {
+        const doc: Document | undefined = c.document ?? c.contentDocument;
+        if (!doc?.head) continue;
+        let style = doc.getElementById('sc-reader-style') as HTMLStyleElement | null;
+        if (!style) {
+          style = doc.createElement('style');
+          style.id = 'sc-reader-style';
+          doc.head.appendChild(style);
+        }
+        style.textContent = `p,div,span,li,h1,h2,h3,h4,h5,h6{line-height:${lh} !important;}`;
+      }
+    } catch {
+      // 文档未就绪时忽略，翻页后重放
     }
   }, []);
 
@@ -121,18 +161,12 @@ export default function EpubViewer({
         localRendition = ebook.renderTo(containerRef.current!, {
           width: '100%',
           height: '100%',
-          spread: spreadRef.current, // auto 随屏宽单/双列；可手动覆写
+          spread: spreadRef.current, // 单列/双列，可手动切换
         });
         renditionRef.current = localRendition;
         localRendition.themes.register('paper', {
-          // 强制相对行高：书籍自带的固定像素行高在放大字号后
-          // 会导致行框超过分页高度而被裁切
-          body: {
-            background: '#fbf7ee',
-            'line-height': '1.6 !important',
-          },
+          body: { background: '#fbf7ee' },
           p: {
-            'line-height': '1.6 !important',
             margin: '0.25em 0 !important',
           },
         });
@@ -145,8 +179,9 @@ export default function EpubViewer({
           const idx = location?.start?.index ?? 0;
           setChapter({ current: idx + 1, total: totalChapters });
           onProgress(idx + 1, totalChapters);
-          // 新章节的 iframe 需要重新套用字号
+          // 新章节的 iframe 需要重新套用字号与行距
           applyFontSize(fontSizeRef.current);
+          applyLineHeight();
         });
         // 书页 iframe 内的按键不会冒泡到父页面，由 epubjs 代理出来
         localRendition.on('keyup', (e: KeyboardEvent) =>
@@ -199,6 +234,29 @@ export default function EpubViewer({
     applyFontSize(fontSizeRef.current);
     localStorage.setItem('starcloud.fontStep', String(stepIndex));
   }, [stepIndex, applyFontSize]);
+
+  // 行距变化：注入新行距并记住
+  useEffect(() => {
+    lineHeightRef.current = LINE_HEIGHTS[lineHeightIdx];
+    applyLineHeight();
+    localStorage.setItem('starcloud.lineHeight', String(lineHeightIdx));
+  }, [lineHeightIdx, applyLineHeight]);
+
+  // 页边距变化：收缩容器宽度，让分页引擎按新尺寸重排
+  const readyRef = useRef(false);
+  useEffect(() => {
+    readyRef.current = ready;
+  }, [ready]);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const px = MARGINS[marginIdx];
+    el.style.paddingLeft = `${px}px`;
+    el.style.paddingRight = `${px}px`;
+    // 初始化阶段不触发 resize（渲染器自会按容器尺寸排版）
+    if (readyRef.current) renditionRef.current?.resize?.();
+    localStorage.setItem('starcloud.margin', String(marginIdx));
+  }, [marginIdx]);
 
   /** 切换单/双列：记住当前位置，切换排版后回到原处 */
   function switchSpread() {
@@ -266,6 +324,22 @@ export default function EpubViewer({
             onClick={() => setStepIndex(Math.min(FONT_STEPS.length - 1, stepIndex + 1))}
           >
             A+
+          </button>
+          <button
+            className="btn"
+            disabled={!ready}
+            title="行间距"
+            onClick={() => setLineHeightIdx((i) => (i + 1) % LINE_HEIGHTS.length)}
+          >
+            行{LINE_HEIGHTS[lineHeightIdx]}
+          </button>
+          <button
+            className="btn"
+            disabled={!ready}
+            title="左右页边距"
+            onClick={() => setMarginIdx((i) => (i + 1) % MARGINS.length)}
+          >
+            边{MARGIN_LABELS[marginIdx]}
           </button>
         </div>
       </div>
