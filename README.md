@@ -11,7 +11,7 @@
 | `apps/server` 后端 API | ✅ 完成 | 认证 / 书籍 / 进度 / 用户管理 |
 | `apps/admin` 管理后台 | ✅ 完成 | 登录、书籍上传、列表、删除 |
 | `apps/reader` Web 阅读端 | ✅ 基本完成 | TXT / PDF 已支持；EPUB 渲染器已接入 |
-| `apps/mobile` 安卓 App | 🚧 暂未完成 | 计划使用 Expo + React Native |
+| `apps/mobile` 安卓 App | 🚧 暂未完成 | 计划使用 Expo + React Native，[功能规格](docs/mobile-spec.md)已冻结 |
 | 部署配置 | ⏳ 暂未完成 | 生产部署脚本与 HTTPS 配置待补充 |
 
 ## 架构
@@ -42,9 +42,10 @@ StarCloud/
 │   │   ├── PDF:  浏览器原生渲染（iframe + query token）
 │   │   └── TXT:  滚动式阅读，滚动位置换算进度
 │   │
-│   └── mobile/          🚧 暂未完成。计划 Expo + React Native，
-│                          设置页可填服务器地址，安卓出 APK 直装，
-│                          iOS 可经 EAS 云构建（分发需 Apple 开发者账号）
+│   └── mobile/          🚧 暂未完成。计划 Expo + React Native：
+│                          双书源（本地导入 + 云端书架）、零多余权限、
+│                          分页式/滚动式双翻页引擎。
+│                          详见 docs/mobile-spec.md
 │
 ├── packages/
 │   └── shared/          ✅ 三端共用的 TypeScript 类型定义
