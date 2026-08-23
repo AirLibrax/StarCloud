@@ -97,7 +97,7 @@ export default function ReaderPage() {
     scheduleReport(currentPage, totalPages);
   }
 
-  const reportTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   function scheduleReport(page: number, total: number) {
     clearTimeout(reportTimer.current);
     reportTimer.current = setTimeout(() => reportProgress(page, total), 1500);

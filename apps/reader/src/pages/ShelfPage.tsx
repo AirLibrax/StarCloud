@@ -36,10 +36,17 @@ export default function ShelfPage() {
         {shelf?.map(({ book, progress }) => (
           <Link to={`/read/${book.id}`} key={book.id} className="book-card">
             <div className={`book-cover cover-${book.fileType}`}>
-              {book.fileType.toUpperCase()}
+              {book.coverImage ? (
+                <img src={book.coverImage} alt={book.title} loading="lazy" />
+              ) : (
+                book.fileType.toUpperCase()
+              )}
             </div>
             <div className="book-meta">
-              <div className="book-title">{book.title}</div>
+              <div className="book-title">
+                {book.title}
+                {book.volume != null && ` 第${book.volume}卷`}
+              </div>
               <div className="book-author">{book.author || '未知作者'}</div>
               {progress ? (
                 <>

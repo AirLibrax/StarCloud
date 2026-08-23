@@ -50,7 +50,7 @@ export default function BooksPage() {
     try {
       const form = new FormData();
       form.append('title', title.trim());
-      form.append('author', author.trim());
+      if (author.trim()) form.append('author', author.trim());
       form.append('file', file);
       await api<BookRow>('/api/books', { method: 'POST', body: form });
       setTitle('');
@@ -95,10 +95,9 @@ export default function BooksPage() {
         <h3>上传新书</h3>
         <form className="upload-form" onSubmit={handleUpload}>
           <input
-            placeholder="书名"
+            placeholder="书名（留空自动识别）"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            required
             maxLength={200}
           />
           <input
@@ -136,7 +135,19 @@ export default function BooksPage() {
             <tbody>
               {books.map((b) => (
                 <tr key={b.id}>
-                  <td>{b.title}</td>
+                  <td>
+                    <div className="title-cell">
+                      {b.coverImage && (
+                        <img src={b.coverImage} alt="" className="cover-thumb" />
+                      )}
+                      <span>
+                        {b.title}
+                        {b.volume != null && (
+                          <span className="vol-badge">第{b.volume}卷</span>
+                        )}
+                      </span>
+                    </div>
+                  </td>
                   <td>{b.author || '-'}</td>
                   <td>
                     <span className={`tag tag-${b.fileType}`}>{b.fileType.toUpperCase()}</span>

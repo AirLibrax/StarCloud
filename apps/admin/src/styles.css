@@ -179,6 +179,28 @@ tr:last-child td {
   border-bottom: none;
 }
 
+.title-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cover-thumb {
+  width: 32px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+}
+.vol-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  background: rgba(83, 125, 150, 0.12);
+  color: #3f6179;
+}
+
 .tag {
   display: inline-block;
   padding: 1px 8px;

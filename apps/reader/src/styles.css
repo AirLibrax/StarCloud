@@ -169,7 +169,7 @@ input:focus {
   opacity: 0.85;
 }
 .book-cover {
-  height: 120px;
+  height: 150px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -177,6 +177,11 @@ input:focus {
   font-weight: 500;
   letter-spacing: 0.1em;
   color: #fffdf7;
+}
+.book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .cover-pdf {
   background: #8b5a4a;

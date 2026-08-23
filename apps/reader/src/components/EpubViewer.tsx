@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import ePub, { type Book as EpubBook, type Rendition } from 'epubjs';
+import ePub from 'epubjs';
 import { getToken } from '../api/client';
-
-/**
- * 字号档位（仿 Apple Books）：离散档位而不是任意缩放，
- * 配合强制相对行高，保证任何档位都不会出现文字被分页边缘裁切
- */
-const FONT_STEPS = [80, 90, 100, 110, 125, 140, 160, 180];
 
 interface Props {
   bookId: number;
@@ -17,27 +11,61 @@ interface Props {
 }
 
 /**
+ * 字号档位（仿 Apple Books）：离散档位而不是任意缩放，
+ * 配合强制相对行高，保证任何档位都不会出现文字被分页边缘裁切。
+ */
+const FONT_STEPS = [80, 90, 100, 110, 125, 140, 160, 180];
+
+/** 排版模式：auto 随屏宽自动单/双列，none 强制单列，always 强制双列 */
+const SPREAD_MODES = ['auto', 'none', 'always'] as const;
+type SpreadMode = (typeof SPREAD_MODES)[number];
+const MODE_LABEL: Record<SpreadMode, string> = {
+  auto: '自动',
+  none: '单列',
+  always: '双列',
+};
+
+/**
  * EPUB 渲染器：epubjs 封装。
  * - 文件经 fetch ArrayBuffer 加载，令牌不落 URL
  * - 进度锚定章节序号（spine index），与后端 currentPage/totalPages 模型对齐
- * - 翻页三通道：键盘（window + iframe 代理）、触屏滑动、后续可加点击热区
+ * - 翻页三通道：键盘（window + iframe 代理）、触屏滑动、工具栏按钮
+ *
+ * epubjs 自带的类型声明不完整，以下用局部宽松类型处理其运行时 API。
  */
-export default function EpubViewer({ bookId, initialPercentage, onProgress }: Props) {
+export default function EpubViewer({
+  bookId,
+  initialPercentage,
+  onProgress,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const bookRef = useRef<EpubBook | null>(null);
-  const renditionRef = useRef<Rendition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bookRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renditionRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [fontSize, setFontSize] = useState(100);
-  const stepIndex = Math.max(
-    0,
-    FONT_STEPS.indexOf(FONT_STEPS.reduce((best, s) => (Math.abs(s - fontSize) < Math.abs(best - fontSize) ? s : best))),
-  );
+  const [stepIndex, setStepIndex] = useState(() => {
+    const saved = parseInt(localStorage.getItem('starcloud.fontStep') ?? '', 10);
+    return Number.isInteger(saved) && saved >= 0 && saved < FONT_STEPS.length
+      ? saved
+      : FONT_STEPS.indexOf(100); // 默认 100%
+  });
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
 
-  // 字号与键盘处理器的 ref：初始化 effect 只跑一次，
-  // 通过 ref 让回调始终拿到最新值，而不触发渲染器重建
-  const fontSizeRef = useRef(fontSize);
+  /** 排版模式偏好持久化到 localStorage */
+  const spreadRef = useRef<SpreadMode>(
+    ((['auto', 'none', 'always'] as const).find(
+      (m) => m === localStorage.getItem('starcloud.spread'),
+    ) ?? 'auto') as SpreadMode,
+  );
+  const [spreadLabel, setSpreadLabel] = useState(
+    MODE_LABEL[spreadRef.current],
+  );
+
+  /** 字号与键盘处理器的 ref：初始化 effect 只跑一次，
+   *  通过 ref 让回调始终拿到最新值，而不触发渲染器重建 */
+  const fontSizeRef = useRef(FONT_STEPS[stepIndex] ?? 100);
   const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
 
   const goPrev = useCallback(() => renditionRef.current?.prev(), []);
@@ -52,11 +80,12 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
     if (!rendition) return;
     rendition.themes.fontSize(`${size}%`);
     try {
-      rendition.getContents().forEach((c: any) =>
-        c.css('font-size', `${size}%`),
-      );
+      const contents = rendition.getContents() ?? [];
+      for (const c of contents) {
+        c.css('font-size', `${size}%`);
+      }
     } catch {
-      // 个别章节文档尚未就绪时忽略，relocated 后会重放
+      // 个别章节文档尚未就绪时忽略，翻页后会重放
     }
   }, []);
 
@@ -78,7 +107,7 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
   // 初始化渲染器（bookId 变化才重建）
   useEffect(() => {
     let cancelled = false;
-    let localRendition: Rendition | null = null;
+    let localRendition: any = null;
 
     (async () => {
       try {
@@ -95,13 +124,12 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
         localRendition = ebook.renderTo(containerRef.current!, {
           width: '100%',
           height: '100%',
-          spread: 'auto', // 宽屏自动双列，窄屏单列（iPad 式）
-          allowScripted: false,
+          spread: spreadRef.current, // auto 随屏宽单/双列；可手动覆写
         });
         renditionRef.current = localRendition;
         localRendition.themes.register('paper', {
-          // 强制相对行高与边距：书籍自带的固定像素行高在放大字号后会
-          // 导致行框超过分页高度而被裁切，这里统一覆盖为相对值
+          // 强制相对行高：书籍自带的固定像素行高在放大字号后
+          // 会导致行框超过分页高度而被裁切
           body: {
             background: '#fbf7ee',
             'line-height': '1.6 !important',
@@ -117,7 +145,7 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
         let totalChapters = 0;
 
         localRendition.on('relocated', (location: any) => {
-          const idx = location.start.index as number;
+          const idx = location?.start?.index ?? 0;
           setChapter({ current: idx + 1, total: totalChapters });
           onProgress(idx + 1, totalChapters);
           // 新章节的 iframe 需要重新套用字号
@@ -131,7 +159,8 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
         // spine 是懒加载的：先等 ready 才能读章节数与定位
         await ebook.ready;
         if (cancelled) return;
-        totalChapters = ebook.spine.items.length;
+        totalChapters =
+          ((ebook.spine as any)?.items as any[])?.length ?? 0;
 
         // 章节级恢复上次位置
         const startIndex = Math.min(
@@ -149,8 +178,12 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
 
     return () => {
       cancelled = true;
-      localRendition?.destroy();
-      bookRef.current?.destroy();
+      try {
+        localRendition?.destroy();
+        bookRef.current?.destroy();
+      } catch {
+        // destroy 时 iframe 可能已 detach，忽略
+      }
       renditionRef.current = null;
       bookRef.current = null;
     };
@@ -163,11 +196,34 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
     return () => window.removeEventListener('keyup', keyHandler);
   }, [keyHandler]);
 
-  // 字号变化立即应用
+  // 字号变化立即应用并记住档位
   useEffect(() => {
-    fontSizeRef.current = fontSize;
-    applyFontSize(fontSize);
-  }, [fontSize, applyFontSize]);
+    fontSizeRef.current = FONT_STEPS[stepIndex];
+    applyFontSize(fontSizeRef.current);
+    localStorage.setItem('starcloud.fontStep', String(stepIndex));
+  }, [stepIndex, applyFontSize]);
+
+  /** 切换单/双列：记住当前位置，切换排版后回到原处 */
+  function switchSpread() {
+    const rendition = renditionRef.current;
+    if (!rendition || !ready) return;
+    const currentMode = spreadRef.current;
+    const next =
+      SPREAD_MODES[(SPREAD_MODES.indexOf(currentMode) + 1) % SPREAD_MODES.length];
+    spreadRef.current = next;
+    setSpreadLabel(MODE_LABEL[next]);
+    localStorage.setItem('starcloud.spread', next);
+
+    let cfi: string | undefined;
+    try {
+      cfi = rendition.currentLocation()?.start?.cfi;
+    } catch {
+      // 尚无位置信息
+    }
+    rendition.spread(next);
+    rendition.clear();
+    rendition.display(cfi ?? undefined);
+  }
 
   // 触摸滑动翻页
   const touchStartX = useRef<number | null>(null);
@@ -187,22 +243,30 @@ export default function EpubViewer({ bookId, initialPercentage, onProgress }: Pr
       <div className="epub-toolbar">
         <button
           className="btn"
-          disabled={stepIndex === 0}
-          onClick={() => setFontSize(FONT_STEPS[Math.max(0, stepIndex - 1)])}
+          disabled={!ready || stepIndex === 0}
+          onClick={() => setStepIndex(Math.max(0, stepIndex - 1))}
         >
           A-
         </button>
         <span className="reader-progress">
-          {loadError
-            ? loadError
-            : ready && chapter.total > 0
-              ? `${chapter.current}/${chapter.total} 章 · ${stepIndex + 1}/${FONT_STEPS.length} 档`
-              : '打开中…'}
+          {loadError ??
+            (!ready
+              ? '打开中…'
+              : chapter.total > 0
+                ? `${chapter.current}/${chapter.total} 章 · 第${stepIndex + 1}档`
+                : '')}
         </span>
         <button
           className="btn"
-          disabled={stepIndex === FONT_STEPS.length - 1}
-          onClick={() => setFontSize(FONT_STEPS[Math.min(FONT_STEPS.length - 1, stepIndex + 1)])}
+          onClick={() => switchSpread()}
+          disabled={!ready}
+        >
+          {spreadLabel}
+        </button>
+        <button
+          className="btn"
+          disabled={!ready || stepIndex === FONT_STEPS.length - 1}
+          onClick={() => setStepIndex(Math.min(FONT_STEPS.length - 1, stepIndex + 1))}
         >
           A+
         </button>

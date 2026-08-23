@@ -5,6 +5,8 @@ export type BookFileType = 'pdf' | 'epub' | 'txt';
 export interface Book {
   id: number;
   title: string;
+  /** 卷数（如「第3卷」的 3），无法识别时为 null */
+  volume: number | null;
   author: string | null;
   description: string | null;
   coverImage: string | null;

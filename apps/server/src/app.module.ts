@@ -12,6 +12,11 @@ import { UsersModule } from './users/users.module';
   imports: [
     // 从 .env 读配置并注入到 process.env
     ConfigModule.forRoot({ isGlobal: true }),
+    // 上传的书籍文件与封面图（dist -> server -> apps）
+    ServeStaticModule.forRoot({
+      rootPath: resolve(__dirname, '..', '..', 'server', 'uploads'),
+      serveRoot: '/uploads',
+    }),
     // 生产部署：托管管理后台构建产物，全站一个进程
     // （admin/dist 不存在时此模块静默跳过，不影响开发）
     ServeStaticModule.forRoot({

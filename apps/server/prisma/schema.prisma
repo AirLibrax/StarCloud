@@ -24,6 +24,7 @@ model User {
 model Book {
   id          Int       @id @default(autoincrement())
   title       String
+  volume      Int?
   author      String?
   description String?
   coverImage  String?
