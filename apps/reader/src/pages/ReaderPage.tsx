@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Book, ReadingProgress, UpdateProgressRequest } from '@starcloud/shared';
 import { api, getToken } from '../api/client';
+import EpubViewer from '../components/EpubViewer';
 
 /**
  * 阅读器：按格式分流渲染。
@@ -154,10 +155,22 @@ export default function ReaderPage() {
       )}
 
       {book?.fileType === 'epub' && (
-        <div className="epub-placeholder">
-          <p>EPUB 渲染器还在路上。</p>
-          <p className="hint">这本书已安全入库，等阅读器就绪即可开读。</p>
-        </div>
+        <EpubViewer
+          bookId={book.id}
+          initialPercentage={progress?.percentage ?? 0}
+          onProgress={(page, total) => {
+            const pct = Math.round((page / total) * 1000) / 10;
+            setProgress((p) => ({
+              id: p?.id ?? 0,
+              bookId: book.id,
+              currentPage: page,
+              totalPages: total,
+              percentage: pct,
+              updatedAt: p?.updatedAt ?? '',
+            }));
+            scheduleReport(page, total);
+          }}
+        />
       )}
     </div>
   );
