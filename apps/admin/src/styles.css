@@ -1,0 +1,226 @@
+:root {
+  --ink: #2a2622;
+  --ink-light: #4a433c;
+  --ink-muted: #6b6158;
+  --paper: #f5efe4;
+  --card: #fbf7ee;
+  --line: #d8cfbe;
+  --accent: #537d96;
+  --accent-dark: #3f6179;
+  --danger: #8b2c1f;
+  --green: #4a6b4a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', serif;
+  line-height: 1.6;
+}
+
+/* ---- 登录页 ---- */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2rem 2.25rem;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.login-card h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 500;
+}
+.login-sub {
+  margin: -0.5rem 0 0.5rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--ink-light);
+}
+
+input,
+button {
+  font-family: inherit;
+}
+input {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.95rem;
+  background: #fffdf7;
+  color: var(--ink);
+}
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--accent-dark);
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: rgba(83, 125, 150, 0.08);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fffdf7;
+}
+.btn.primary:hover {
+  background: var(--accent-dark);
+}
+.btn.danger {
+  color: var(--danger);
+}
+.btn.danger:hover {
+  background: rgba(139, 44, 31, 0.08);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ---- 主页面 ---- */
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+.topbar h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.88rem;
+  color: var(--ink-light);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1.1rem 1.3rem;
+  margin-bottom: 1.2rem;
+}
+.card h3 {
+  margin: 0 0 0.8rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+}
+
+.upload-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+.hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-light);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+td {
+  padding: 7px 8px;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+}
+tr:last-child td {
+  border-bottom: none;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-family: system-ui, sans-serif;
+}
+.tag-pdf {
+  background: rgba(139, 44, 31, 0.08);
+  color: var(--danger);
+}
+.tag-epub {
+  background: rgba(83, 125, 150, 0.12);
+  color: var(--accent-dark);
+}
+.tag-txt {
+  background: rgba(74, 107, 74, 0.1);
+  color: var(--green);
+}
+
+.error-box {
+  border: 1px solid rgba(139, 44, 31, 0.35);
+  background: rgba(139, 44, 31, 0.06);
+  color: var(--danger);
+  border-radius: 4px;
+  padding: 0.55rem 0.8rem;
+  margin-bottom: 1rem;
+  font-size: 0.86rem;
+}
+.notice-box {
+  border: 1px solid rgba(74, 107, 74, 0.35);
+  background: rgba(74, 107, 74, 0.07);
+  color: var(--green);
+  border-radius: 4px;
+  padding: 0.55rem 0.8rem;
+  margin-bottom: 1rem;
+  font-size: 0.86rem;
+}
+
+@media (max-width: 720px) {
+  .upload-form {
+    grid-template-columns: 1fr;
+  }
+}

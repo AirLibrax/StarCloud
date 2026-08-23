@@ -1,0 +1,32 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { getStoredUser, getToken } from './api/client';
+import { AuthProvider } from './auth-context';
+import LoginPage from './pages/LoginPage';
+import BooksPage from './pages/BooksPage';
+
+/** 未登录时访问受保护页面 → 重定向到 /login */
+function AuthGate({ children }: { children: React.ReactNode }) {
+  if (!getToken() || !getStoredUser()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/"
+          element={
+            <AuthGate>
+              <BooksPage />
+            </AuthGate>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
+  );
+}
