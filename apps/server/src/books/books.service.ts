@@ -14,6 +14,26 @@ const ALLOWED_TYPES: Record<string, BookFileType> = {
   'text/plain': 'txt',
 };
 
+/** 浏览器常把 .epub/.pdf 标成通用二进制流，此时按扩展名兕底 */
+const EXT_FALLBACK: Record<string, BookFileType> = {
+  '.pdf': 'pdf',
+  '.epub': 'epub',
+  '.txt': 'txt',
+};
+
+function resolveFileType(
+  mimetype: string,
+  filename: string,
+): BookFileType | null {
+  const byMime = ALLOWED_TYPES[mimetype];
+  if (byMime) return byMime;
+
+  if (mimetype === 'application/octet-stream' || mimetype === '') {
+    return EXT_FALLBACK[extname(filename).toLowerCase()] ?? null;
+  }
+  return null;
+}
+
 const CONTENT_TYPE: Record<BookFileType, string> = {
   pdf: 'application/pdf',
   epub: 'application/epub+zip',
@@ -51,11 +71,13 @@ export class BooksService {
       throw new BadRequestException('缺少书籍文件');
     }
 
-    // 用文件真实内容类型做白名单校验，不信任客户端声称的类型
-    const fileType = ALLOWED_TYPES[file.mimetype];
+    // mimetype 白名单优先；通用二进制流时按扩展名兕底。
+    // 此时 multer 已把文件写入 uploads，拒绝时必须清理，否则留下孤儿文件
+    const fileType = resolveFileType(file.mimetype, file.originalname);
     if (!fileType) {
+      unlinkSync(file.path);
       throw new BadRequestException(
-        `不支持的文件类型: ${file.mimetype}，仅支持 PDF / EPUB / TXT`,
+        `不支持的文件类型: ${file.mimetype || '未知'}（文件名 ${file.originalname}），仅支持 PDF / EPUB / TXT`,
       );
     }
 
