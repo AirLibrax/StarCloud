@@ -1,0 +1,279 @@
+:root {
+  --ink: #2a2622;
+  --ink-light: #4a433c;
+  --ink-muted: #6b6158;
+  --paper: #f5efe4;
+  --card: #fbf7ee;
+  --line: #d8cfbe;
+  --accent: #537d96;
+  --accent-dark: #3f6179;
+  --danger: #8b2c1f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', serif;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+button {
+  font-family: inherit;
+}
+button {
+  white-space: nowrap;
+}
+
+.btn {
+  display: inline-block;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--accent-dark);
+  border-radius: 4px;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+.btn:hover {
+  background: rgba(83, 125, 150, 0.08);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fffdf7;
+}
+.btn.primary:hover {
+  background: var(--accent-dark);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--ink-light);
+}
+input {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.5rem 0.65rem;
+  font-size: 1rem;
+  background: #fffdf7;
+  color: var(--ink);
+}
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ---- 登录 ---- */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2rem 2.25rem;
+  width: 340px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.login-card h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 500;
+}
+.login-sub {
+  margin: -0.5rem 0 0.5rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.error-box {
+  border: 1px solid rgba(139, 44, 31, 0.35);
+  background: rgba(139, 44, 31, 0.06);
+  color: var(--danger);
+  border-radius: 4px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.86rem;
+}
+.hint {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+/* ---- 书架 ---- */
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+.topbar h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+.foot {
+  margin-top: 2.5rem;
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.9rem;
+}
+@media (max-width: 480px) {
+  .shelf-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.book-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 0.15s ease;
+}
+.book-card:hover {
+  opacity: 0.85;
+}
+.book-cover {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: #fffdf7;
+}
+.cover-pdf {
+  background: #8b5a4a;
+}
+.cover-epub {
+  background: #537d96;
+}
+.cover-txt {
+  background: #4a6b4a;
+}
+.book-meta {
+  padding: 0.55rem 0.65rem 0.7rem;
+}
+.book-title {
+  font-size: 0.92rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.book-author {
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  margin-bottom: 0.45rem;
+}
+.progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(83, 125, 150, 0.15);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+}
+.progress-text {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+/* ---- 阅读器 ---- */
+.reader-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* 手机浏览器地址栏收起时的高度 */
+}
+.reader-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+.reader-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader-progress {
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 3em;
+  text-align: right;
+}
+
+.txt-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.2rem 1.1rem 3rem;
+  font-size: 1.05rem;
+  line-height: 1.9;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pdf-frame {
+  flex: 1;
+  border: none;
+  width: 100%;
+}
+
+.epub-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+}

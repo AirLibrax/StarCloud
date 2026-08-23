@@ -29,11 +29,13 @@ export class JwtAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const header = request.headers.authorization ?? '';
 
-    if (!header.startsWith('Bearer ')) {
+    // 令牌优先从请求头取；iframe/下载链接等无法带自定义头的场景允许 ?access_token= 兜底
+    const bearer = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
+    const token = bearer ?? (request.query['access_token'] as string | undefined) ?? null;
+
+    if (!token) {
       throw new UnauthorizedException('缺少访问令牌');
     }
-
-    const token = header.slice('Bearer '.length);
     let payload: { sub: number };
     try {
       payload = await this.jwt.verifyAsync(token);
