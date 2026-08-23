@@ -70,6 +70,7 @@ export default function EpubViewer({
   const [marginIdx, setMarginIdx] = useState(() =>
     readIdx('starcloud.margin', MARGINS.length, 1),
   );
+  const [panelOpen, setPanelOpen] = useState(false);
 
   /** 排版模式偏好持久化到 localStorage（旧值 auto 归入单列） */
   const savedSpread = localStorage.getItem('starcloud.spread') as SpreadMode | null;
@@ -312,37 +313,84 @@ export default function EpubViewer({
         </span>
         <div className="toolbar-right">
           <button
-            className="btn"
-            disabled={!ready || stepIndex === 0}
-            onClick={() => setStepIndex(Math.max(0, stepIndex - 1))}
-          >
-            A-
-          </button>
-          <button
-            className="btn"
-            disabled={!ready || stepIndex === FONT_STEPS.length - 1}
-            onClick={() => setStepIndex(Math.min(FONT_STEPS.length - 1, stepIndex + 1))}
-          >
-            A+
-          </button>
-          <button
-            className="btn"
+            className="btn icon-btn"
             disabled={!ready}
-            title="行间距"
-            onClick={() => setLineHeightIdx((i) => (i + 1) % LINE_HEIGHTS.length)}
+            title="排版设置"
+            aria-label="排版设置"
+            onClick={() => setPanelOpen((v) => !v)}
           >
-            行{LINE_HEIGHTS[lineHeightIdx]}
-          </button>
-          <button
-            className="btn"
-            disabled={!ready}
-            title="左右页边距"
-            onClick={() => setMarginIdx((i) => (i + 1) % MARGINS.length)}
-          >
-            边{MARGIN_LABELS[marginIdx]}
+            <svg
+              viewBox="0 0 24 24"
+              width="17"
+              height="17"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
           </button>
         </div>
       </div>
+      {panelOpen && (
+        <>
+          <div className="panel-mask" onClick={() => setPanelOpen(false)} />
+          <div className="settings-panel">
+            <div className="setting-row">
+              <div className="setting-label">
+                <span>字号</span>
+                <span>{FONT_STEPS[stepIndex]}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={FONT_STEPS.length - 1}
+                step={1}
+                value={stepIndex}
+                onChange={(e) => setStepIndex(Number(e.target.value))}
+                list="font-ticks"
+              />
+              <datalist id="font-ticks">
+                {FONT_STEPS.map((_, i) => (
+                  <option key={i} value={i} />
+                ))}
+              </datalist>
+            </div>
+            <div className="setting-row">
+              <div className="setting-label">
+                <span>行间距</span>
+                <span>{LINE_HEIGHTS[lineHeightIdx].toFixed(1)} 倍</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={LINE_HEIGHTS.length - 1}
+                step={1}
+                value={lineHeightIdx}
+                onChange={(e) => setLineHeightIdx(Number(e.target.value))}
+              />
+            </div>
+            <div className="setting-row">
+              <div className="setting-label">
+                <span>左右边距</span>
+                <span>{MARGIN_LABELS[marginIdx]}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={MARGINS.length - 1}
+                step={1}
+                value={marginIdx}
+                onChange={(e) => setMarginIdx(Number(e.target.value))}
+              />
+            </div>
+          </div>
+        </>
+      )}
       <div className="epub-container" ref={containerRef} />
     </div>
   );
