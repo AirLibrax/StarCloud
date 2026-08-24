@@ -280,14 +280,9 @@ export default function EpubViewer({
           onProgress(idx + 1, totalChapters);
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
-          applyTapZonesRef.current();
+          applyDocHandlersRef.current();
         }
 
-        // iframe 内按键代理：keydown（按下瞬间）即触发翻页，
-        // 若挂 keyup 则要等松手才翻页，手感极差
-        localRendition.on('keydown', (e: KeyboardEvent) =>
-          keyHandlerRef.current(e),
-        );
         localRendition.on('relocated', onRelocated);
 
         await ebook.ready;
@@ -357,22 +352,24 @@ export default function EpubViewer({
   }, [marginIdx]);
 
   /**
-   * 点击翻页模式：向章节 iframe 文档注入捕获阶段的点击监听。
-   * capture 先于引擎的 bubble 监听执行，stopImmediatePropagation
-   * 掐掉引擎自带点击翻页，保证倒 Y 分区是唯一判定来源。
+   * 向章节 iframe 文档注入交互监听：
+   * - 点击翻页模式：捕获阶段的点击监听，stopImmediatePropagation
+   *   掐掉引擎自带点击翻页，保证倒 Y 分区是唯一判定来源；
+   * - 所有模式：原生 keydown 监听 —— 引擎只转发 keyup 不转发 keydown，
+   *   若依赖转发则按住不动、松手才翻页，必须直接在事件源监听。
    */
-  const applyTapZones = useCallback(() => {
-    if (pageModeRef.current !== 'tap') return;
+  const applyDocHandlers = useCallback(() => {
     try {
       for (const c of renditionRef.current?.getContents() ?? []) {
         const doc: Document | undefined = c.document ?? c.contentDocument;
-        if (!doc || (doc as any).__scTapZone) continue;
-        (doc as any).__scTapZone = true;
+        if (!doc || (doc as any).__scHandlers) continue;
+        (doc as any).__scHandlers = true;
         doc.addEventListener(
           'click',
           (e: MouseEvent) => {
             e.preventDefault();
             e.stopImmediatePropagation();
+            if (pageModeRef.current !== 'tap') return;
             const dir = tapZoneAction(
               e.clientX ?? 0,
               window.innerWidth,
@@ -382,13 +379,18 @@ export default function EpubViewer({
           },
           true,
         );
+        doc.addEventListener(
+          'keydown',
+          (e: KeyboardEvent) => keyHandlerRef.current(e),
+          true,
+        );
       }
     } catch {
-      // 文档未就绪时忽略
+      // 文档未就绪时忽略，翻页后重放
     }
   }, []);
-  const applyTapZonesRef = useRef(applyTapZones);
-  applyTapZonesRef.current = applyTapZones;
+  const applyDocHandlersRef = useRef(applyDocHandlers);
+  applyDocHandlersRef.current = applyDocHandlers;
 
   /** 切换单列/双列排版 */
   function toggleSpread() {
