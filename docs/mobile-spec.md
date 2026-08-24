@@ -42,11 +42,12 @@
 与 Web 阅读端一致（档位常量同源 @starcloud/shared）：
 
 - 字号：8 档（80% – 180%）
-- 行间距：4 档（1.4 / 1.6 / 1.9 / 2.2 倍）
+- 行间距：4 档（1.4 / 1.6 / 1.8 / 2.0 倍）
 - 左右页边距：4 档（窄 / 中 / 宽 / 很宽）
 - 单列 / 双列二选一 —— **待办**：App 暂未实现双列排版（Web 端
-  仅视口 >900px 且开启双列时生效），偏好结构两侧一致
-- 所有设置持久化到本地（AsyncStorage `starcloud.readingPrefs`）
+  仅视口 >900px 且开启双列时生效），偏好键与 Web 对应持久化
+- 所有设置持久化到本地（AsyncStorage 键名与 Web localStorage 的
+  `starcloud.*` 系列一一对应，见 docs/reader-interaction.md 第六节）
 
 ### F5 翻页模式
 
@@ -56,14 +57,17 @@
 1. **点击翻页（tap）**
    - 屏幕左右两半分区，含义随「翻页方向」偏好镜像
      （shared.tapZoneAction，与 Web 相同的判定）
-   - 翻页方向设置：「向左滑下一页」（默认）/「向右滑下一页」
+   - 翻页方向设置：「向左下一页」（默认）/「向右下一页」
 2. **滑动翻页（swipe）**
    - 轴向二选一：左右滑动 / 上下滑动
    - 左右滑动：横滑手势判定 |dx|>50 且 (dx>0)===(方向为 left-next)
-     即下一页（公式与 Web EpubViewer 逐字一致）；方向沿用点击翻页时的设置
-   - 上下滑动：无缝滚动（TXT 为 ScrollView 连续滚动，EPUB 为
-     flow=scrolled 连续渲染；章内无缝，章末需翻章动作）
-   - 上下滑动的 paged 单页翻动（axis=vertical）为规格预留，未实现
+     即下一页（公式与 Web EpubViewer 逐字一致）；此模式下同样显示
+     「翻页方向」子选项（与 tap 语义相同）
+   - 上下滑动：无缝滚动，滚到底自动接下一章（TXT 为 ScrollView
+     连续滚动，EPUB 为 flow=scrolled + manager=continuous 连续渲染，
+     与 Web 映射表一致）
+   - 上下滑动无任何子选项（单页翻动样式已从交互规格删除，见
+     docs/reader-interaction.md 第八节，不得再实现）
 
 ### F6 性能要求
 
