@@ -171,6 +171,8 @@ export default function EpubViewer({
   const lastSpineIdxRef = useRef<number | null>(null);
   /** 进度上报守卫：章节变化才报（防抖在父组件） */
   const lastReportedIdxRef = useRef<number | null>(null);
+  /** 会话位置所属的书（换书时重置 lastSpineIdxRef/lastReportedIdxRef） */
+  const sessionBookRef = useRef<number | null>(null);
 
   const goPrev = useCallback(() => renditionRef.current?.prev(), []);
   const goNext = useCallback(() => renditionRef.current?.next(), []);
@@ -249,6 +251,14 @@ export default function EpubViewer({
     let cancelled = false;
     let localRendition: any = null;
 
+    // 换书（bookId 变化）时清空本会话位置，防止用上一本书的章节序号
+    // 在新书上 display 越界（spine.get 无此章节会报 No Section Found）
+    if (sessionBookRef.current !== bookId) {
+      sessionBookRef.current = bookId;
+      lastSpineIdxRef.current = null;
+      lastReportedIdxRef.current = null;
+    }
+
     const container = containerRef.current;
     const mode = pageModeRef.current;
     const layout = swipeLayoutRef.current;
@@ -321,13 +331,15 @@ export default function EpubViewer({
         if (cancelled) return;
         totalChapters = ((ebook.spine as any)?.items as any[])?.length ?? 0;
 
-        // 优先回到本会话内上次所在章节，其次按历史百分比（规格六）
+        // 优先回到本会话内上次所在章节，其次按历史百分比（规格六）；
+        // 章节序号一律钳制在有效范围内，防止换书后越界
         const startIdx =
-          lastSpineIdxRef.current ??
-          Math.min(
-            totalChapters - 1,
-            Math.floor((initialPercentage / 100) * totalChapters),
-          );
+          lastSpineIdxRef.current != null
+            ? Math.min(lastSpineIdxRef.current, totalChapters - 1)
+            : Math.min(
+                totalChapters - 1,
+                Math.floor((initialPercentage / 100) * totalChapters),
+              );
 
         await localRendition.display(startIdx > 0 ? startIdx : undefined);
         if (cancelled) return;
