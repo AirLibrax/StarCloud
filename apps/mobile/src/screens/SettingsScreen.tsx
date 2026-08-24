@@ -12,6 +12,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../App';
 import { getSettings, saveSettings } from '../storage/settings';
 import { login } from '../api/client';
+import { colors } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -64,19 +65,19 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: '#1c1a17' }}
+      style={{ flex: 1, backgroundColor: colors.bg }}
       contentContainerStyle={{ paddingTop: 56, paddingHorizontal: 20, paddingBottom: 40 }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={{ color: '#9fb8c9', fontSize: 15 }}>← 返回</Text>
+          <Text style={{ color: 'colors.accent', fontSize: 15 }}>← 返回</Text>
         </TouchableOpacity>
-        <Text style={{ color: '#f5efe4', fontSize: 19, fontWeight: '600', marginLeft: 14 }}>
+        <Text style={{ color: 'colors.text', fontSize: 19, fontWeight: '600', marginLeft: 14 }}>
           设置
         </Text>
       </View>
 
-      <Text style={{ color: '#f5efe4', fontSize: 15, marginBottom: 6 }}>服务器地址</Text>
+      <Text style={{ color: 'colors.text', fontSize: 15, marginBottom: 6 }}>服务器地址</Text>
       <TextInput
         value={serverUrl}
         onChangeText={setServerUrl}
@@ -86,11 +87,11 @@ export default function SettingsScreen() {
         autoCorrect={false}
         keyboardType="url"
         style={{
-          backgroundColor: '#2c2924',
+          backgroundColor: 'colors.card',
           borderRadius: 6,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          color: '#f5efe4',
+          color: 'colors.text',
           fontSize: 15,
           marginBottom: 16,
         }}
@@ -98,32 +99,32 @@ export default function SettingsScreen() {
 
       {!connected && (
         <>
-          <Text style={{ color: '#f5efe4', fontSize: 15, marginBottom: 6 }}>用户名</Text>
+          <Text style={{ color: 'colors.text', fontSize: 15, marginBottom: 6 }}>用户名</Text>
           <TextInput
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
             style={{
-              backgroundColor: '#2c2924',
+              backgroundColor: 'colors.card',
               borderRadius: 6,
               paddingVertical: 10,
               paddingHorizontal: 12,
-              color: '#f5efe4',
+              color: 'colors.text',
               fontSize: 15,
               marginBottom: 16,
             }}
           />
-          <Text style={{ color: '#f5efe4', fontSize: 15, marginBottom: 6 }}>密码</Text>
+          <Text style={{ color: 'colors.text', fontSize: 15, marginBottom: 6 }}>密码</Text>
           <TextInput
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             style={{
-              backgroundColor: '#2c2924',
+              backgroundColor: 'colors.card',
               borderRadius: 6,
               paddingVertical: 10,
               paddingHorizontal: 12,
-              color: '#f5efe4',
+              color: 'colors.text',
               fontSize: 15,
               marginBottom: 20,
             }}
@@ -132,13 +133,13 @@ export default function SettingsScreen() {
             onPress={handleSaveAndLogin}
             disabled={busy}
             style={{
-              backgroundColor: busy ? '#3f5a70' : '#537d96',
+              backgroundColor: busy ? 'colors.accentDark' : '#537d96',
               borderRadius: 6,
               paddingVertical: 12,
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: '#f5efe4', fontSize: 15 }}>
+            <Text style={{ color: 'colors.text', fontSize: 15 }}>
               {busy ? '连接中…' : '保存并登录'}
             </Text>
           </TouchableOpacity>

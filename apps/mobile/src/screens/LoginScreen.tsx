@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../App';
 import { getSettings, saveSettings } from '../storage/settings';
 import { login } from '../api/client';
+import { colors } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -36,11 +37,11 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#1c1a17', justifyContent: 'center', padding: 24 }}>
-      <Text style={{ color: '#f5efe4', fontSize: 22, fontWeight: '600', marginBottom: 4 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', padding: 24 }}>
+      <Text style={{ color: 'colors.text', fontSize: 22, fontWeight: '600', marginBottom: 4 }}>
         重新登录
       </Text>
-      <Text style={{ color: '#8a8072', fontSize: 13, marginBottom: 20 }}>
+      <Text style={{ color: 'colors.textMuted', fontSize: 13, marginBottom: 20 }}>
         访问令牌已失效，请重新登录云端书架
       </Text>
       <TextInput
@@ -50,11 +51,11 @@ export default function LoginScreen() {
         placeholderTextColor="#5a534a"
         autoCapitalize="none"
         style={{
-          backgroundColor: '#2c2924',
+          backgroundColor: 'colors.card',
           borderRadius: 6,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          color: '#f5efe4',
+          color: 'colors.text',
           fontSize: 15,
           marginBottom: 12,
         }}
@@ -66,11 +67,11 @@ export default function LoginScreen() {
         placeholderTextColor="#5a534a"
         secureTextEntry
         style={{
-          backgroundColor: '#2c2924',
+          backgroundColor: 'colors.card',
           borderRadius: 6,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          color: '#f5efe4',
+          color: 'colors.text',
           fontSize: 15,
           marginBottom: 16,
         }}
@@ -82,13 +83,13 @@ export default function LoginScreen() {
         onPress={handleLogin}
         disabled={busy}
         style={{
-          backgroundColor: busy ? '#3f5a70' : '#537d96',
+          backgroundColor: busy ? 'colors.accentDark' : '#537d96',
           borderRadius: 6,
           paddingVertical: 12,
           alignItems: 'center',
         }}
       >
-        <Text style={{ color: '#f5efe4', fontSize: 15 }}>{busy ? '登录中…' : '登录'}</Text>
+        <Text style={{ color: 'colors.text', fontSize: 15 }}>{busy ? '登录中…' : '登录'}</Text>
       </TouchableOpacity>
     </View>
   );
