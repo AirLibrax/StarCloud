@@ -237,18 +237,16 @@ export default function EpubViewer({
 
         const ebook = ePub(buffer);
         bookRef.current = ebook;
-        // axis 竖向翻页为 epubjs 运行时能力，官方类型声明缺失，此处断言绕过
+        // axis 竖向翻页为 epubjs 运行时能力，官方类型声明缺失，此处断言绕过。
+        // 管理器统一用 continuous：预加载相邻章节，跨章翻页即时化
         const renderOptions: any = {
           width: '100%',
           height: '100%',
           flow:
-            mode === 'swipe' && swipeLayoutRef.current === 'vertical' && verticalStyleRef.current === 'continuous'
+            mode === 'swipe' && swipeLayoutRef.current === 'vertical'
               ? 'scrolled'
               : 'paginated',
-          manager:
-            mode === 'swipe' && swipeLayoutRef.current === 'vertical' && verticalStyleRef.current === 'continuous'
-              ? 'continuous'
-              : 'default',
+          manager: 'continuous',
         };
         if (mode === 'swipe' && swipeLayoutRef.current === 'vertical' && verticalStyleRef.current === 'paged') {
           renderOptions.axis = 'vertical';
@@ -636,7 +634,7 @@ export default function EpubViewer({
               </div>
             )}
 
-            {pageMode === 'swipe' && swipeLayout === 'vertical' && (
+            {pageMode === 'swipe' && isTouch && swipeLayout === 'vertical' && (
               <div className="setting-row">
                 <div className="setting-label">
                   <span>滚动样式</span>
