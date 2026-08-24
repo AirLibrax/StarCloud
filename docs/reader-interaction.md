@@ -1,126 +1,123 @@
-# 阅读器交互规格（实现依据）
+# 阅读器交互规格（最终版 · 全端冻结）
 
-> 本文档描述 apps/reader 与 apps/mobile 阅读器的已实现行为。
+> 本文档是 apps/reader 与 apps/mobile 阅读器的**唯一行为依据**。
 > 修改交互前先改本文档。技术细节以 epubjs 源码为准
 > （node_modules/epubjs/src/，关键文件：rendition.js / managers/default/index.js /
 > layout.js / contents.js / utils/constants.js）。
 
-## 翻页方式（二选一，PageMode）
+## 一、设置面板结构（所有端统一的条目顺序）
 
-### tap 点击翻页
+1. 字号 —— 8 档滑块（FONT_STEPS，默认 100%），热应用即时生效
+2. 行间距 —— 4 档滑块（LINE_HEIGHTS：1.4/1.6/1.8/2.0）
+3. 左右边距 —— 4 档滑块（窄/中/宽/很宽 = MARGINS）
+4. 翻页方式 —— 二选一：**点击翻页 | 滑动翻页**（PageMode）
+5. 条件子项（见下文各端规则）
 
-- 屏幕左右两半分区，含义随「翻页方向」偏好镜像；
-- 实现：书页容器加 `.no-pointer`（iframe pointer-events:none），
-  所有点击落在阅读器外层容器，由 `tapZoneAction()` 统一判定
-  （shared/reading.ts）；点击同时把焦点拉回外层，
-  保证后续按键走外层 keydown 通道；
-- epubjs 本身没有内置的点击分区翻页（0.3.93 源码核实：
-  click/touch 监听仅用于内容链接与标注），指针透明后更不存在双重触发。
+工具栏布局：`[← 书架] ……章节进度…… [单列|双列] [⚙]`
+单双列切换**只在工具栏**，设置面板内不得出现重复入口。
 
-### swipe 滑动翻页
+## 二、翻页方式行为定义
 
-子选项按设备能力显示：
+### 点击翻页（tap）
 
-| 设备 | 可用形态 |
-|------|----------|
-| 触屏（pointer: coarse） | 左右滑动 / 上下滑动 |
-| 鼠标桌面 | 固定为上下无缝滚动（滚轮阅读），无子选项 |
+- 书页 iframe 设 pointer-events:none（CSS .no-pointer），
+  所有点击落在阅读器外层容器，由 shared 的 `tapZoneAction()` 统一判定；
+- 屏幕左右两半分区：左半 = 上一页，右半 = 下一页；
+- **子选项「翻页方向」（SwipeDirection）**：
+  - left-next（默认）：向左下一页 → 左半屏点击 = 下一页；
+  - right-next：向右下一页 → 右半屏点击 = 下一页（镜像）；
+- 引擎收不到任何指针事件，天然无双重点击。
 
-- 左右滑动：paginated flow，触摸滑动方向随「翻页方向」偏好镜像；
-- 上下滑动：flow=scrolled + manager=default（Web 与 App 当前实现一致），
-  章内连续滚动；章末即止，跨章需翻章动作（Web 键盘 ↓/→ 等；
-  App 纯触屏暂无跨章手势，EPUB 竖滑到章末即停）；
-  跨章自动衔接需 manager=continuous（早期实现曾用，后回退为 default，
-  见 git 历史 ec05a55b / fd361c7d）；
-  paged 单页翻动（flow=paginated + axis=vertical，epubjs 运行时能力，
-  官方类型缺失需断言）为规格预留，当前两端均未接入。
+### 滑动翻页（swipe）
 
-## 键盘（PC）
+按设备能力分派：
 
-- 下箭头 = 下一页，上箭头 = 上一页（恒定，不随方向偏好）；
-- 左右箭头含义随「翻页方向」偏好；
-- 监听通道有两条（都挂 keydown）：
-  1. window keydown —— 焦点在外层页面时生效；
-  2. 书页 iframe document 上的 keydown（经 applyDocHandlers 注入）——
-     焦点在书页内时生效。
-  注意：epubjs 对 keydown/keyup 均有转发（utils/constants.js DOM_EVENTS），
-  不要轻信「只转发某一种」的说法；两条通道并存互不重复
-  （同一按键只会在一条通路上触发）。
+| 设备 | 形态 |
+|------|------|
+| 触屏（pointer: coarse） | 子选项「滑动轴向」：左右滑动 / 上下滑动 |
+| 桌面（无触屏） | 无子选项，固定为上下无缝滚动 |
 
-## 手势与事件的架构约定
+- **左右滑动（swipe + horizontal）**：
+  - paginated flow；书页同样 pointer-events:none，
+    手势由外层容器 touchstart/touchend 判定；
+  - 方向公式（与 Web/App 逐字一致）：
+    `isNext = (dx > 0) === (swipeDirection === 'left-next')`，
+    dx > 50px 才触发；
+  - 同样带「翻页方向」子选项，语义同 tap；
+- **上下滑动（swipe + vertical）**：
+  - flow=scrolled 无缝连续滚动，整章连成一条，滚到底自动接下一章；
+  - **没有子选项**（单页翻动样式已删除，不得再实现）；
+  - 书页保持可交互以启用原生滚动；
+- **桌面降级规则**：非触屏设备选择滑动翻页时——
+  自动切为上下无缝滚动 + **强制单列** +
+  工具栏单双列按钮变为禁用状态显示「∅」（悬停提示说明原因）。
 
-书页内容渲染在 iframe 内部，**iframe 内产生的事件不会冒泡到外层页面**。
-因此所有交互监听只有两种正确做法：
+## 三、键盘（PC）
 
-1. 通过 `rendition.on(eventName)` 由 epubjs 代理（其转发表见
-   utils/constants.js 的 DOM_EVENTS：keydown / keyup / click /
-   touchstart / touchend 等）；
-2. 通过 `applyDocHandlers` 直接在 iframe 的 document 上 addEventListener
-   （handler 运行于父页面作用域，可直接调用组件方法）。
+- ↓ = 下一页，↑ = 上一页（恒定，不随方向偏好）；
+- ← → 跟随「翻页方向」偏好（left-next 时 → 为下一页）；
+- keydown 即触发（非 keyup），带 400ms 冷却防连击穿透；
+- 双通道监听：window keydown（焦点在外层）+
+  书页 iframe document 的捕获阶段 keydown（焦点在书页内）；
+  两通道并存不重复（同一按键只走一条通路）。
 
-禁止把 touch/click 监听挂在外层容器元素上指望收到书页内的事件——
-那是无效通道（tap 模式下书页 pe:none 时除外，此时事件本来就落在外层）。
+## 四、单双列（spread）
 
-## 持久化规则
+- 视口宽度 >900px（SPREAD_MIN_WIDTH，平板横屏/桌面）才允许双列，
+  且以用户选择为准（twoUp state）；
+- ≤768px 窄屏（手机竖屏）强制单列并隐藏切换按钮；
+- 滑动翻页模式的桌面端强制单列 + 按钮禁用 ∅（见上）;
+- 监听 window resize 与 matchMedia('(orientation: landscape)')，
+  容器尺寸变化时调用 rendition.resize() 重排。
 
-### 阅读偏好（三端一致，档位常量同源 shared）
+## 五、App 端（apps/mobile）对应关系
 
-Web 端逐项存 `localStorage`，App 端聚合存 AsyncStorage 单键 JSON，
-字段含义与默认值两侧一致（默认：100% 字号 / 1.6 行距 / 中边距 /
-tap / horizontal / continuous / left-next）。
+- 设置存储 AsyncStorage，键名与值域和 Web localStorage 对应（见第六节）；
+- 设置面板结构与 Web 一致：三条滑块 + 翻页方式二选一 +
+  条件子项（swipe 显示轴向、tap 或 swipe/horizontal 显示方向）；
+- App 是纯触屏设备，不存在桌面降级分支；
+- TXT 渲染（TxtPane）：
+  tap = 左右半区 Pressable/tapZoneAction 判定；
+  swipe/horizontal = PanGestureHandler，方向公式同第二节；
+  swipe/vertical = ScrollView 天然无缝滚动；
+- EPUB 渲染（offline-epub.ts 内嵌 WebView）：renderOptions 按
+  pageMode/swipeLayout 注入 flow/manager/axis（映射表同 Web EpubViewer），
+  手势经注入 JS 判定后 postMessage 回 RN 执行翻页。
 
-| Web localStorage 键 | 值 | App readingPrefs 字段 | 默认 |
-|---------------------|-----|------------------------|------|
-| `starcloud.fontStep` | FONT_STEPS 索引 | `fontStep` | 2（100%） |
-| `starcloud.lineHeight` | LINE_HEIGHTS 索引 | `lineHeightIdx` | 1（1.6） |
-| `starcloud.margin` | MARGINS 索引 | `marginIdx` | 1（中） |
-| `starcloud.pageMode` | `'tap' \| 'swipe'` | `pageMode` | `'tap'` |
-| `starcloud.swipeLayout` | `'horizontal' \| 'vertical'` | `swipeLayout` | `'horizontal'` |
-| `starcloud.verticalStyle` | `'continuous' \| 'paged'` | `verticalStyle` | `'continuous'` |
-| `starcloud.swipeDirection` | `'left-next' \| 'right-next'` | `swipeDirection` | `'left-next'` |
-| `starcloud.spreadTwoUp` | `'two-up' \| 'single'` | （App 无，暂无双列） | 双列（视口 >900px 生效） |
+## 六、持久化
 
-App 端其余 AsyncStorage 键：`starcloud.settings`（服务器地址/令牌/用户名）、
-`starcloud.localBooks`（本地书库与本地进度）。
+Web localStorage 键名（App AsyncStorage 一一对应）：
 
-### 阅读进度
+| 键 | 值 |
+|----|----|
+| starcloud.fontStep | 字号档位序号 |
+| starcloud.lineHeight | 行距档位序号 |
+| starcloud.margin | 边距档位序号 |
+| starcloud.pageMode | 'tap' \| 'swipe' |
+| starcloud.swipeLayout | 'horizontal' \| 'vertical' |
+| starcloud.swipeDirection | 'left-next' \| 'right-next' |
+| starcloud.spreadTwoUp | 'single' \| 'two-up' |
 
-- 上报触发：**章节变化才报** —— EPUB 以 spine index 变化为准
-  （连续滚动模式下 relocated 高频触发，按章节去重）；
-  TXT 以估算页码变化为准；
-- 防抖 **3s**（两端一致），失败静默不打断阅读；
-- Web：仅上报服务器 `POST /api/progress`，无本地进度存储；
-- App：云端书上报服务器；本地书写入 `starcloud.localBooks` 内联 progress；
-  云端下载书（cloudBookId）本地与服务器双写。
+进度上报：章节变化才上报，3s 防抖；
+恢复优先级 = 本会话最后位置 > 云端百分比。
 
-## 单列 / 双列（spread）
+## 七、事件与渲染架构约定（实现层红线）
 
-- 双列仅在「视口宽度 >900px（平板横屏 / 桌面）且用户开启双列偏好」时
-  spread='always'，其余一律 'none'（手机窄屏强制单列）；
-- 窗口/设备方向跨过 900px 门槛时自动切换 spread，并按当前章节 CFI
-  重排防截断；容器尺寸变化调用 rendition.resize()（引擎自带 50ms 节流的
-  window resize 监听，容器级变化由 ResizeObserver 兜底）；
-- 单/双列切换按钮仅在视口 >900px 时显示（≤900px 无按钮）；
-- 偏好持久化：`starcloud.spreadTwoUp`（'two-up' | 'single'），
-  默认双列；App 端暂无单列/双列排版（mobile-spec F4 待办）。
+1. 书页内容在 iframe 内，iframe 内事件**不会冒泡到外层页面**；
+   监听只有两条正道：rendition.on(eventName) 代理（转发表见
+   utils/constants.js DOM_EVENTS），或 applyDocHandlers 直接种进
+   iframe document；
+2. epubjs 引擎**没有内置触摸滑动翻页**（touchstart 仅用于内部链接处理）；
+   axis:'vertical' 分页翻动是 default manager 运行时原生能力
+   （官方类型缺失需 as 断言传入 renderTo options）；
+3. paginated flow 下书页 pe:none 后引擎收不到任何点击/触摸——
+   这是 tap 与 swipe/horizontal 模式的既定架构，不是 bug；
+4. 结构性变化（pageMode/swipeLayout/spread 切换）通过 rebuildTick
+   整体重建渲染器并以章节序号衔接位置；refs 必须与 state 严格同步；
+5. 不使用 React StrictMode（epubjs 在 double-effect 下销毁不彻底会白屏）。
 
-## 三端一致
+## 八、已删除项（不得复活）
 
-- 交互语义（翻页方式 / 轴向 / 方向 / 点击分区）统一消费
-  @starcloud/shared 的 reading.ts，三端不得另行硬编码档位或区域规则；
-- App 端 EPUB 为 WebView 内嵌 epubjs 离线渲染（offline-epub.ts），
-  渲染参数映射表与 Web EpubViewer 相同：
-  tap / swipe+horizontal → flow=paginated + manager=default；
-  swipe+vertical → flow=scrolled + manager=default；
-  手势桥接 JS 只上报原始手势（tap 坐标 / 横滑 dx），语义判定在 RN 侧，
-  翻页经 __scNav 回注页面执行；键盘通道仅 Web 有（App 纯触屏）；
-- App 端 TXT 原生渲染（ReaderScreen TxtPane）：
-  tap 点击分区用 shared.tapZoneAction；swipe+horizontal 用
-  PanGestureHandler 判定 |dx|>50 且 (dx>0)===(方向为 left-next)；
-  swipe+vertical 为 ScrollView 无缝滚动；方向公式与 Web 逐字一致。
-
-## 性能
-
-- manager=default 单章管理，跨章首次翻页有数百毫秒加载延迟（固有行为）；
-- relocated 回调中的 setState 已尽量精简；字号/行距热应用通过
-  getContents() 直写文档样式，不触发 React 重渲染。
+- 单页滑动样式（VerticalStyle paged）
+- 三角区/倒 Y 三区点击分区（现为左右两半）
+- 设置面板内的单双列入口（只在工具栏）
