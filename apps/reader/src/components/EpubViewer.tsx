@@ -7,6 +7,8 @@ import {
   LINE_HEIGHTS,
   MARGINS,
   type PageMode,
+  type SwipeLayout,
+  type VerticalStyle,
   type SwipeDirection,
 } from '@starcloud/shared';
 import { getToken } from '../api/client';
@@ -39,6 +41,14 @@ function readPageMode(): PageMode {
   return localStorage.getItem(MODE_KEY) === 'swipe' ? 'swipe' : 'tap';
 }
 
+function readSwipeLayout(): SwipeLayout {
+  return localStorage.getItem(LAYOUT_KEY) === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+function readVerticalStyle(): VerticalStyle {
+  return localStorage.getItem(VSTYLE_KEY) === 'paged' ? 'paged' : 'continuous';
+}
+
 function readDirection(): SwipeDirection {
   return localStorage.getItem(DIR_KEY) === 'right-next'
     ? 'right-next'
@@ -58,6 +68,10 @@ function detectTouch(): boolean {
 
 const MARGIN_LABELS = ['窄', '中', '宽', '很宽'];
 
+function modeLabel(m: PageMode): string {
+  return m === 'tap' ? '点击翻页' : '滑动翻页';
+}
+
 /**
  * EPUB 渲染器。
  *
@@ -65,9 +79,9 @@ const MARGIN_LABELS = ['窄', '中', '宽', '很宽'];
  * - tap:   点击翻页 —— 屏幕左右两半，含义随方向偏好；
  *          书页对指针透明（pointer-events:none），所有点击由外层容器
  *          统一做分区判定，避免与引擎内置行为双重触发。
- * - swipe: 滑动翻页 —— 引擎原生触摸滑动；
- *          触屏上横滑与纵滑均可翻页（按位移主轴判定），
- *          桌面端固定为上下无缝滚动（滚轮阅读）且强制单列。
+ * - swipe: 滑动翻页 —— 触屏上左右滑动或上下滑动（引擎原生触摸），
+ *          桌面端自动降级为上下无缝滚动（滚轮阅读）并强制单列；
+ *          上下滑动为连续渲染（跨章无缝），暂无单页样式。
  *
  * 结构性变化通过 rebuildTick 整体重建渲染器，以章节序号衔接位置；
  * 字号/行距等非结构性变化直接热应用。
@@ -103,6 +117,7 @@ export default function EpubViewer({
 
   /* ---- 翻页偏好状态 ---- */
   const [pageMode, setPageMode] = useState<PageMode>(readPageMode);
+  const [swipeLayout, setSwipeLayout] = useState<SwipeLayout>(readSwipeLayout);
   const [swipeDir, setSwipeDir] = useState<SwipeDirection>(readDirection);
   const [twoUp, setTwoUp] = useState(readSpreadTwoUp);
 
@@ -115,6 +130,7 @@ export default function EpubViewer({
   const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
   const lastNavAtRef = useRef(0);
   const pageModeRef = useRef<PageMode>(readPageMode());
+  const swipeLayoutRef = useRef<SwipeLayout>(readSwipeLayout());
   const swipeDirRef = useRef<SwipeDirection>(readDirection());
   const twoUpRef = useRef(twoUp);
   const lastSpineIdxRef = useRef<number | null>(null);
@@ -166,6 +182,7 @@ export default function EpubViewer({
   const keyHandler = useCallback(
     (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
+      // 下箭头恒为下一页，上箭头恒为上一页
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         goNext();
@@ -189,7 +206,7 @@ export default function EpubViewer({
   );
   keyHandlerRef.current = keyHandler;
 
-  /* ---- 渲染器初始化 ---- */
+  /* ---- 渲染器初始化（bookId / rebuildTick 变化才重建） ---- */
   useEffect(() => {
     let cancelled = false;
     let localRendition: any = null;
@@ -206,12 +223,26 @@ export default function EpubViewer({
         const ebook = ePub(buffer);
         bookRef.current = ebook;
 
+        // 点击翻页 / 左右滑动模式：书页对指针事件完全透明（CSS .no-pointer），
+        // 引擎收不到任何点击/触摸，交互全部由外层容器的统一判定处理
+        const mode = pageModeRef.current;
+        if (
+          mode === 'tap' ||
+          (mode === 'swipe' && swipeLayoutRef.current === 'horizontal')
+        ) {
+          containerRef.current!.classList.add('no-pointer');
+        } else {
+          containerRef.current!.classList.remove('no-pointer');
+        }
+
         localRendition = ebook.renderTo(containerRef.current!, {
           width: '100%',
           height: '100%',
-          flow: pageModeRef.current === 'swipe' ? 'scrolled' : 'paginated',
-          manager:
-            pageModeRef.current === 'swipe' ? 'continuous' : 'default',
+          flow:
+            mode === 'swipe' && swipeLayoutRef.current === 'vertical'
+              ? 'scrolled'
+              : 'paginated',
+          manager: 'default',
           spread: twoUpRef.current ? 'always' : 'none',
         });
         renditionRef.current = localRendition;
@@ -245,13 +276,6 @@ export default function EpubViewer({
         localRendition.on('keyup', (e: KeyboardEvent) =>
           keyHandlerRef.current(e),
         );
-
-        // 点击翻页模式：书页对指针事件透明（CSS .no-pointer），
-        // 引擎收不到任何点击，倒 Y 分区在外层容器统一判定
-        if (pageModeRef.current === 'tap') {
-          containerRef.current!.classList.add('no-pointer');
-        }
-
         localRendition.on('relocated', onRelocated);
 
         await ebook.ready;
@@ -289,8 +313,8 @@ export default function EpubViewer({
   }, [bookId, rebuildTick]);
 
   useEffect(() => {
-    window.addEventListener('keyup', keyHandler);
-    return () => window.removeEventListener('keyup', keyHandler);
+    window.addEventListener('keydown', keyHandler);
+    return () => window.removeEventListener('keydown', keyHandler);
   }, [keyHandler]);
 
   useEffect(() => {
@@ -320,6 +344,29 @@ export default function EpubViewer({
     localStorage.setItem(MARGIN_KEY, String(marginIdx));
   }, [marginIdx]);
 
+  /**
+   * 向章节 iframe 文档注入捕获阶段的按键监听。
+   * 焦点在书页内时，按键按下瞬间即触发翻页（不经引擎转发、不等松手）。
+   */
+  const applyDocHandlers = useCallback(() => {
+    try {
+      for (const c of renditionRef.current?.getContents() ?? []) {
+        const doc: Document | undefined = c.document ?? c.contentDocument;
+        if (!doc || (doc as any).__scKeydown) continue;
+        (doc as any).__scKeydown = true;
+        doc.addEventListener(
+          'keydown',
+          (e: KeyboardEvent) => keyHandlerRef.current(e),
+          true,
+        );
+      }
+    } catch {
+      // 文档未就绪时忽略，翻页后重放
+    }
+  }, []);
+  const applyDocHandlersRef = useRef(applyDocHandlers);
+  applyDocHandlersRef.current = applyDocHandlers;
+
   /** 切换单列/双列排版 */
   function toggleSpread() {
     const rendition = renditionRef.current;
@@ -340,39 +387,63 @@ export default function EpubViewer({
     rendition.display(cfi ?? undefined);
   }
 
-  /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置 */
+  /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置。
+   *  桌面（非触屏）选滑动翻页时自动降级为上下无缝滚动（滚轮阅读）。 */
   function changePageMode(mode: PageMode) {
     if (mode === pageMode || !ready) return;
     setPageMode(mode);
     pageModeRef.current = mode;
     localStorage.setItem(MODE_KEY, mode);
+
+    if (mode === 'swipe' && !isTouch) {
+      swipeLayoutRef.current = 'vertical';
+      setSwipeLayout('vertical');
+      localStorage.setItem(LAYOUT_KEY, 'vertical');
+    }
+
     setRebuildTick((t) => t + 1);
   }
 
-  // 触摸滑动（滑动翻页模式）：横滑与纵滑都判定，取位移主轴
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  /** 切换滑动轴向（仅触屏）：整体重建渲染器 */
+  function changeSwipeLayout(layout: SwipeLayout) {
+    if (layout === swipeLayout || !ready) return;
+    setSwipeLayout(layout);
+    swipeLayoutRef.current = layout;
+    localStorage.setItem(LAYOUT_KEY, layout);
+    setRebuildTick((t) => t + 1);
+  }
+
+  function changeDirection(dir: SwipeDirection) {
+    setSwipeDir(dir);
+    swipeDirRef.current = dir;
+    localStorage.setItem(DIR_KEY, dir);
+  }
+
+  // 触摸滑动翻页（滑动翻页·左右轴向）
+  const touchStartX = useRef<number | null>(null);
   function onTouchStart(e: React.TouchEvent) {
-    if (pageMode !== 'swipe') return;
-    const t = e.touches[0];
-    touchStart.current = { x: t.clientX, y: t.clientY };
+    touchStartX.current =
+      pageMode === 'swipe' && swipeLayout === 'horizontal'
+        ? e.touches[0].clientX
+        : null;
   }
   function onTouchEnd(e: React.TouchEvent) {
-    const start = touchStart.current;
-    touchStart.current = null;
-    if (pageMode !== 'swipe' || !ready || !start) return;
-
-    const dx = e.changedTouches[0].clientX - start.x;
-    const dy = e.changedTouches[0].clientY - start.y;
-
-    // 「向左下一页」= 从左向右滑；「向右下一页」反之
-    const isHorizontal = Math.abs(dx) > Math.abs(dy);
-    if (isHorizontal && Math.abs(dx) > 50) {
+    if (
+      touchStartX.current === null ||
+      pageMode !== 'swipe' ||
+      swipeLayout !== 'horizontal' ||
+      !ready
+    ) {
+      touchStartX.current = null;
+      return;
+    }
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 50) {
+      // 「向左下一页」= 从左向右滑（dx>0）；「向右下一页」反之
       const isNext = (dx > 0) === (swipeDir === 'left-next');
       isNext ? goNext() : goPrev();
-    } else if (!isHorizontal && Math.abs(dy) > 50) {
-      // 上推（dy<0）= 下一页；下拉 = 上一页
-      dy < 0 ? goNext() : goPrev();
     }
+    touchStartX.current = null;
   }
 
   return (
@@ -477,23 +548,48 @@ export default function EpubViewer({
             <div className="setting-row">
               <div className="setting-label">
                 <span>翻页方式</span>
-                <span>{pageMode === 'tap' ? '点击翻页' : '滑动翻页'}</span>
+                <span>{modeLabel(pageMode)}</span>
               </div>
               <div className="segment-group">
-                <button
-                  className={`segment-btn${pageMode === 'tap' ? ' active' : ''}`}
-                  onClick={() => changePageMode('tap')}
-                >
-                  点击翻页
-                </button>
-                <button
-                  className={`segment-btn${pageMode === 'swipe' ? ' active' : ''}`}
-                  onClick={() => changePageMode('swipe')}
-                >
-                  滑动翻页
-                </button>
+                {(
+                  [
+                    ['tap', '点击翻页'],
+                    ['swipe', '滑动翻页'],
+                  ] as [PageMode, string][]
+                ).map(([m, label]) => (
+                  <button
+                    key={m}
+                    className={`segment-btn${pageMode === m ? ' active' : ''}`}
+                    onClick={() => changePageMode(m)}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
+
+            {pageMode === 'swipe' && isTouch && (
+              <div className="setting-row">
+                <div className="setting-label">
+                  <span>滑动轴向</span>
+                  <span>{swipeLayout === 'vertical' ? '上下滑动' : '左右滑动'}</span>
+                </div>
+                <div className="segment-group">
+                  <button
+                    className={`segment-btn${swipeLayout === 'horizontal' ? ' active' : ''}`}
+                    onClick={() => changeSwipeLayout('horizontal')}
+                  >
+                    左右滑动
+                  </button>
+                  <button
+                    className={`segment-btn${swipeLayout === 'vertical' ? ' active' : ''}`}
+                    onClick={() => changeSwipeLayout('vertical')}
+                  >
+                    上下滑动
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
