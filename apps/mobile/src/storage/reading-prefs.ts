@@ -1,31 +1,36 @@
 /**
- * 阅读偏好（排版设置）：与 Web 端同一套档位。
+ * 阅读偏好（排版与翻页设置）。
+ * 档位常量与翻页模式类型的唯一权威定义在 @starcloud/shared。
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  FONT_STEPS,
+  LINE_HEIGHTS,
+  MARGINS,
+  type PageMode,
+  type SwipeDirection,
+} from '@starcloud/shared';
 
-export const FONT_STEPS = [80, 90, 100, 110, 125, 140, 160, 180];
-export const LINE_HEIGHTS = [1.4, 1.6, 1.9, 2.2];
-export const MARGINS = [10, 24, 48, 80];
+// 转出口供 App 内使用
+export { FONT_STEPS, LINE_HEIGHTS, MARGINS };
+export type { PageMode, SwipeDirection };
 
-export type PageMode = 'paged' | 'scrolled';
 export type PageAxis = 'horizontal' | 'vertical';
-/** 分页式横向翻页的方向习惯：向左滑=下一页（默认）或 向右滑=下一页 */
-export type SwipeDirection = 'left-next' | 'right-next';
 
 export interface ReadingPrefs {
   fontStep: number; // FONT_STEPS 索引
-  lineHeightIdx: number;
-  marginIdx: number;
+  lineHeightIdx: number; // LINE_HEIGHTS 索引
+  marginIdx: number; // MARGINS 索引
   pageMode: PageMode;
-  pageAxis: PageAxis;
+  pageAxis: PageAxis; // 仅 TXT 分页式有意义
   swipeDirection: SwipeDirection;
 }
 
 const DEFAULTS: ReadingPrefs = {
-  fontStep: 2,
+  fontStep: FONT_STEPS.indexOf(100),
   lineHeightIdx: 1,
   marginIdx: 1,
-  pageMode: 'paged',
+  pageMode: 'tap',
   pageAxis: 'horizontal',
   swipeDirection: 'left-next',
 };

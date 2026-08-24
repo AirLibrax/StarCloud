@@ -9,6 +9,7 @@ import { colors } from '../theme';
 import { fileUrl, reportProgress } from '../api/client';
 import { ensureCachedFile } from '../api/file-cache';
 import { saveLocalProgress, listLocalBooks } from '../storage/local-books';
+import { tapZoneAction } from '@starcloud/shared';
 import {
   getReadingPrefs,
   updateReadingPrefs,
@@ -138,19 +139,24 @@ export default function ReaderScreen() {
               </Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <SegmentBtn
-                  label="分页式"
-                  active={prefs.pageMode === 'paged'}
-                  onPress={() => patchPrefs({ pageMode: 'paged' })}
+                  label="点击翻页"
+                  active={prefs.pageMode === 'tap'}
+                  onPress={() => patchPrefs({ pageMode: 'tap' })}
                 />
                 <SegmentBtn
-                  label="滚动式"
-                  active={prefs.pageMode === 'scrolled'}
-                  onPress={() => patchPrefs({ pageMode: 'scrolled' })}
+                  label="上下滚动"
+                  active={prefs.pageMode === 'scroll-vertical'}
+                  onPress={() => patchPrefs({ pageMode: 'scroll-vertical' })}
+                />
+                <SegmentBtn
+                  label="左右滚动"
+                  active={prefs.pageMode === 'scroll-horizontal'}
+                  onPress={() => patchPrefs({ pageMode: 'scroll-horizontal' })}
                 />
               </View>
             </View>
 
-            {prefs.pageMode === 'paged' && fileType !== 'epub' && (
+            {prefs.pageMode === 'tap' && fileType !== 'epub' && (
               <View>
                 <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
                   翻页轴向
@@ -170,7 +176,7 @@ export default function ReaderScreen() {
               </View>
             )}
 
-            {prefs.pageMode === 'paged' && (
+            {(prefs.pageMode === 'tap' || prefs.pageMode === 'scroll-horizontal') && (
               <View>
                 <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
                   滑动方向（左右翻页时）
@@ -590,9 +596,12 @@ function TxtPane({
   const totalPages =
     content === null ? 0 : Math.max(1, Math.ceil(content.length / CHARS_PER_PAGE));
 
-  /** 分页式：按字符块切页，横向滑动翻页；方向反转通过页序映射实现 */
+  /** 分页/横向滚动：按字符块切页；方向反转通过页序映射实现 */
   const pages: string[] = [];
-  if (content !== null && prefs.pageMode === 'paged') {
+  if (
+    content !== null &&
+    (prefs.pageMode === 'tap' || prefs.pageMode === 'scroll-horizontal')
+  ) {
     for (let i = 0; i < content.length; i += CHARS_PER_PAGE) {
       pages.push(content.slice(i, i + CHARS_PER_PAGE));
     }
@@ -605,7 +614,7 @@ function TxtPane({
       if (
         node &&
         content !== null &&
-        prefs.pageMode === 'scrolled' &&
+        prefs.pageMode === 'scroll-vertical' &&
         !restored.current &&
         initialPercentage > 0
       ) {
@@ -646,7 +655,7 @@ function TxtPane({
     color: '#2a2622',
   };
 
-  if (prefs.pageMode === 'scrolled') {
+  if (prefs.pageMode === 'scroll-vertical') {
     return (
       <ScrollView
         ref={scrollRefCb}
@@ -698,17 +707,21 @@ function TxtPane({
           key={i}
           activeOpacity={1}
           onPress={(e) => {
-            // 点击左 1/3 向前翻、右 1/3 向后翻（按物理方向）
-            const x = e.nativeEvent.locationX;
-            const w = Dimensions.get('window').width;
-            const physicalNext = x > w * 0.66;
-            const physicalPrev = x < w * 0.33;
-            const forwardIsLeft = prefs.swipeDirection === 'left-next';
-            const goNext = forwardIsLeft ? physicalNext || true : false;
-            void goNext;
-            // 简化实现：点击右侧总是显示下一屏内容
-            if (physicalNext) scrollRef.current?.scrollTo({ x: (i + 1) * Dimensions.get('window').width });
-            else if (physicalPrev) scrollRef.current?.scrollTo({ x: (i - 1) * Dimensions.get('window').width });
+            // 点击分区与 Web 端一致：倒 Y 三区（shared.tapZoneAction）
+            const { width: w, height: h } = Dimensions.get('window');
+            const dir = tapZoneAction(
+              e.nativeEvent.locationX,
+              e.nativeEvent.locationY,
+              w,
+              h,
+            );
+            const target = dir === 'next' ? i + 1 : i - 1;
+            if (target >= 0 && target < pages.length) {
+              scrollRef.current?.scrollTo({
+                x: target * Dimensions.get('window').width,
+                animated: true,
+              });
+            }
           }}
           style={{
             width: Dimensions.get('window').width,

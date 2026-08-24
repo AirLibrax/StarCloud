@@ -225,10 +225,12 @@ input:focus {
 
 /* ---- 阅读器 ---- */
 .reader-page {
+  flex: 1;
   display: flex;
   flex-direction: column;
   height: 100vh;
   height: 100dvh; /* 手机浏览器地址栏收起时的高度 */
+  overscroll-behavior: none; /* 禁止下拉刷新与边缘导航手势 */
 }
 .reader-topbar {
   display: flex;
@@ -280,13 +282,38 @@ input:focus {
   min-height: 0;
   position: relative; /* 设置面板的定位基准 */
 }
+.segment-group {
+  display: flex;
+  gap: 6px;
+}
 .epub-toolbar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0.3rem 0.9rem;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border);
   background: var(--card);
+}
+.segment-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 5px;
+  border: 0.5px solid var(--border);
+  background: transparent;
+  color: var(--text-light);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.segment-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fffdf7;
+}
+/* 手机：单双列按钮隐藏（窄屏强制单列） */
+@media (max-width: 768px) {
+  .spread-btn {
+    display: none;
+  }
 }
 .toolbar-left {
   display: flex;

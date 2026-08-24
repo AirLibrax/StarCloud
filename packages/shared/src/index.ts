@@ -5,6 +5,7 @@
 export * from './user';
 export * from './book';
 export * from './progress';
+export * from './reading';
 
 /** 后端 API 的统一错误结构 */
 export interface ApiError {
