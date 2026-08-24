@@ -97,6 +97,11 @@ export default function EpubViewer({
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
   const [panelOpen, setPanelOpen] = useState(false);
 
+  /** 是否为触屏设备：左右滑动是触屏专属交互，桌面置灰/隐藏 */
+  const isTouch =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(pointer: coarse)').matches;
+
   /* ---- 排版偏好状态 ---- */
   const [stepIndex, setStepIndex] = useState(() =>
     readIdx(FONT_KEY, FONT_STEPS.length, FONT_STEPS.indexOf(100)),
@@ -217,10 +222,14 @@ export default function EpubViewer({
         const buffer = await res.arrayBuffer();
         if (cancelled) return;
 
-        // 点击翻页模式：书页对指针事件完全透明（CSS .no-pointer），
-        // 引擎收不到任何点击/触摸，翻页全部由外层容器的倒 Y 分区判定，
-        // 从根上消除引擎内置点击翻页与自定义逻辑的双重触发
-        if (pageModeRef.current === 'tap') {
+        // 点击翻页 / 左右滑动模式：书页对指针事件完全透明（CSS .no-pointer），
+        // 引擎收不到任何点击/触摸，交互全部由外层容器的统一判定处理；
+        // 上下滑动（无缝）模式保持书页可交互以启用原生滚动
+        const mode = pageModeRef.current;
+        if (
+          mode === 'tap' ||
+          (mode === 'swipe' && swipeLayoutRef.current === 'horizontal')
+        ) {
           containerRef.current!.classList.add('no-pointer');
         } else {
           containerRef.current!.classList.remove('no-pointer');
@@ -228,8 +237,6 @@ export default function EpubViewer({
 
         const ebook = ePub(buffer);
         bookRef.current = ebook;
-
-        const mode = pageModeRef.current;
         localRendition = ebook.renderTo(containerRef.current!, {
           width: '100%',
           height: '100%',
@@ -590,7 +597,7 @@ export default function EpubViewer({
               </div>
             </div>
 
-            {pageMode === 'swipe' && (
+            {pageMode === 'swipe' && isTouch && (
               <div className="setting-row">
                 <div className="setting-label">
                   <span>滑动方向</span>
