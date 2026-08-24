@@ -377,10 +377,12 @@ function EpubPane({
   prefs: { fontStep: number; lineHeightIdx: number };
   onProgress: (page: number, total: number) => void;
 }) {
+  const webRef = useRef<WebView>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState('正在准备渲染引擎…');
 
-  // 组装自包含阅读页 HTML（引擎与书全部内联，WebView 直接加载）
+  // 组装自包含阅读页 HTML（引擎内联；书数据由 RN 分块推送）
   useEffect(() => {
     let cancelled = false;
     setHtml(null);
@@ -431,9 +433,28 @@ function EpubPane({
     };
   }, [bookKey]);
 
+  async function pushBookData() {
+    const LegacyFS = require('expo-file-system/legacy');
+    if (!webRef.current || !fileUri) return;
+    const b64 = await LegacyFS.readAsStringAsync(fileUri, {
+      encoding: LegacyFS.EncodingType.Base64,
+    });
+    setStatus('正在解压书籍…');
+    const CHUNK = 512 * 1024;
+    for (let i = 0; i < b64.length; i += CHUNK) {
+      const piece = JSON.stringify(b64.slice(i, i + CHUNK));
+      webRef.current.injectJavaScript(`window.__pushChunk(${piece});true;`);
+    }
+    webRef.current.injectJavaScript(`window.__openBook();true;`);
+  }
+
   function onMessage(e: any) {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
+      if (msg.t === 'need-book') {
+        pushBookData();
+        return;
+      }
       if (msg.t === 'progress') onProgress(msg.page, msg.total);
       if (msg.t === 'error') setError(msg.message);
     } catch {
@@ -451,21 +472,24 @@ function EpubPane({
   if (!html)
     return (
       <View style={{ flex: 1, alignItems: 'center', paddingTop: 60 }}>
-        <Text style={{ color: '#6b6158' }}>正在准备渲染引擎…</Text>
+        <Text style={{ color: '#6b6158' }}>{status}</Text>
       </View>
     );
 
   return (
-    <WebView
-      source={{ html }}
-      onMessage={onMessage}
-      originWhitelist={['*']}
-      javaScriptEnabled
-      domStorageEnabled
-      allowFileAccess
-      allowUniversalAccessFromFileURLs
-      style={{ flex: 1, backgroundColor: '#fbf7ee' }}
-    />
+    <View style={{ flex: 1 }}>
+      <WebView
+        ref={webRef}
+        source={{ html }}
+        onMessage={onMessage}
+        originWhitelist={['*']}
+        javaScriptEnabled
+        domStorageEnabled
+        allowFileAccess
+        allowUniversalAccessFromFileURLs
+        style={{ flex: 1, backgroundColor: '#fbf7ee' }}
+      />
+    </View>
   );
 }
 
