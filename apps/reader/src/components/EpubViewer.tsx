@@ -217,6 +217,15 @@ export default function EpubViewer({
         const buffer = await res.arrayBuffer();
         if (cancelled) return;
 
+        // 点击翻页模式：书页对指针事件完全透明（CSS .no-pointer），
+        // 引擎收不到任何点击/触摸，翻页全部由外层容器的倒 Y 分区判定，
+        // 从根上消除引擎内置点击翻页与自定义逻辑的双重触发
+        if (pageModeRef.current === 'tap') {
+          containerRef.current!.classList.add('no-pointer');
+        } else {
+          containerRef.current!.classList.remove('no-pointer');
+        }
+
         const ebook = ePub(buffer);
         bookRef.current = ebook;
 
@@ -447,7 +456,20 @@ export default function EpubViewer({
   }
 
   return (
-    <div className="epub-viewer">
+    <div
+      className="epub-viewer"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onClick={(e) => {
+        // 点击翻页模式：书页 iframe 已对指针事件透明，
+        // 所有点击落在外层容器，按左右两半分区判定
+        if (pageMode !== 'tap' || !ready) return;
+        const target = e.target as HTMLElement;
+        if (target.closest('.epub-toolbar') || target.closest('.settings-panel')) return;
+        const dir = tapZoneAction(e.clientX, window.innerWidth, swipeDir);
+        navigateWithCooldown(dir);
+      }}
+    >
       <div className="epub-toolbar">
         <div className="toolbar-left">
           <Link to="/" className="btn">← 书架</Link>
