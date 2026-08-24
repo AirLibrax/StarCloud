@@ -74,7 +74,14 @@ window.__openBook = function() {
     var book = ePub(b64, { encoding: 'base64' });
     var rendition = book.renderTo('viewer', { width: '100%', height: '100%', spread: 'none' });
     rendition.themes.register('paper', {
-      body: { background: '#fbf7ee', 'line-height': window.__lineHeight + ' !important' },
+      body: {
+        background: '#fbf7ee',
+        'line-height': window.__lineHeight + ' !important',
+        // 禁止文本选择：快速点击翻页不会被误识别为双击选中
+        'user-select': 'none !important',
+        '-webkit-user-select': 'none !important',
+        '-webkit-touch-callout': 'none !important'
+      },
       p: { 'line-height': window.__lineHeight + ' !important', margin: '0.25em 0 !important' }
     });
     rendition.themes.select('paper');
