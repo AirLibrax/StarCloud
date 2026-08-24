@@ -349,11 +349,8 @@ input:focus {
 .epub-container.no-pointer,
 .epub-container.no-pointer iframe {
   pointer-events: none !important;
-}
-/* 点击翻页模式：书页对指针透明，点击统一落在外层容器判定 */
-.epub-container.no-events,
-.epub-container.no-events iframe {
-  pointer-events: none !important;
+  /* 阻止浏览器默认触摸行为干扰手势判定 */
+  touch-action: none;
 }
 
 /* ---- 排版设置面板 ---- */
