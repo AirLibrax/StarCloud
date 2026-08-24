@@ -78,6 +78,11 @@ export default function EpubViewer({
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
   const [panelOpen, setPanelOpen] = useState(false);
 
+  /** 是否为触屏设备：左右滚动是触屏专属交互，桌面置灰 */
+  const isTouch =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(pointer: coarse)').matches;
+
   const [stepIndex, setStepIndex] = useState(() =>
     readIdx(FONT_KEY, FONT_STEPS.length, FONT_STEPS.indexOf(100)),
   );
@@ -170,6 +175,53 @@ export default function EpubViewer({
   );
   keyHandlerRef.current = keyHandler;
 
+  /** 向章节 iframe 注入触摸滑动手势（tap / 左右滚动模式） */
+  const applyGestures = useCallback(() => {
+    if (pageModeRef.current === 'scroll-vertical') return;
+    try {
+      for (const c of renditionRef.current?.getContents() ?? []) {
+        const doc: Document | undefined = c.document ?? c.contentDocument;
+        if (!doc || (doc as any).__scGestures) continue;
+        (doc as any).__scGestures = true;
+        let tsX: number | null = null;
+        let tsY: number | null = null;
+        doc.addEventListener(
+          'touchstart',
+          (e: TouchEvent) => {
+            if (e.touches.length === 1) {
+              tsX = e.touches[0].clientX;
+              tsY = e.touches[0].clientY;
+            }
+          },
+          { passive: true },
+        );
+        doc.addEventListener(
+          'touchend',
+          (e: TouchEvent) => {
+            if (tsX === null || tsY === null) return;
+            const dx = e.changedTouches[0].clientX - tsX;
+            const dy = e.changedTouches[0].clientY - tsY;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+              const isNext = dx < 0 === (swipeDirRef.current === 'left-next');
+              navigateWithCooldown(isNext ? 'next' : 'prev');
+            }
+            tsX = null;
+          },
+          { passive: true },
+        );
+      }
+    } catch {
+      // 文档未就绪时忽略，翻页后重放
+    }
+  }, [navigateWithCooldown]);
+  const applyGesturesRef = useRef(applyGestures);
+  applyGesturesRef.current = applyGestures;
+
+  // swipeDir 状态变化时同步 ref（供注入的手势读取最新方向）
+  useEffect(() => {
+    swipeDirRef.current = swipeDir;
+  }, [swipeDir]);
+
   /* ---- 渲染器初始化（bookId / rebuildTick 变化才重建） ---- */
   useEffect(() => {
     let cancelled = false;
@@ -213,6 +265,10 @@ export default function EpubViewer({
 
         let totalChapters = 0;
 
+        localRendition.on('keyup', (e: KeyboardEvent) =>
+          keyHandlerRef.current(e),
+        );
+
         localRendition.on('relocated', (location: any) => {
           const idx = location?.start?.index ?? 0;
           lastSpineIdxRef.current = idx;
@@ -220,6 +276,7 @@ export default function EpubViewer({
           onProgress(idx + 1, totalChapters);
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
+          applyGesturesRef.current();
         });
 
         // iframe 内按键代理
@@ -227,13 +284,29 @@ export default function EpubViewer({
           keyHandlerRef.current(e),
         );
 
-        // 点击翻页模式：倒 Y 分区（坐标由引擎从 iframe 转发）
+        // 点击翻页模式：倒 Y 分区（坐标由引擎从 iframe 转发），
+        // 方向偏好生效：right-next 时点击分区含义镜像
         localRendition.on('click', (e: any) => {
           if (pageModeRef.current !== 'tap') return;
           const w = window.innerWidth;
           const h = window.innerHeight;
-          const dir = tapZoneAction(e.clientX ?? 0, e.clientY ?? 0, w, h);
+          let dir = tapZoneAction(e.clientX ?? 0, e.clientY ?? 0, w, h);
+          if (swipeDirRef.current === 'right-next') {
+            dir = dir === 'next' ? 'prev' : 'next';
+          }
           navigateWithCooldown(dir);
+        });
+
+        // 触摸滑动翻页（tap / 左右滚动模式）：手势必须注入到 iframe 文档内，
+        // 手指在书页上的触摸不会冒泡到外层容器；新章节渲染后重放
+        localRendition.on('relocated', (location: any) => {
+          applyGesturesRef.current();
+          const idx = location?.start?.index ?? 0;
+          lastSpineIdxRef.current = idx;
+          setChapter({ current: idx + 1, total: totalChapters });
+          onProgress(idx + 1, totalChapters);
+          applyFontSize(fontSizeRef.current);
+          applyLineHeight();
         });
 
         await ebook.ready;
@@ -471,15 +544,20 @@ export default function EpubViewer({
                     ['scroll-vertical', '上下滚动'],
                     ['scroll-horizontal', '左右滚动'],
                   ] as [PageMode, string][]
-                ).map(([m, label]) => (
-                  <button
-                    key={m}
-                    className={`segment-btn${pageMode === m ? ' active' : ''}`}
-                    onClick={() => changePageMode(m)}
-                  >
-                    {label}
-                  </button>
-                ))}
+                ).map(([m, label]) => {
+                  const disabled = m === 'scroll-horizontal' && !isTouch;
+                  return (
+                    <button
+                      key={m}
+                      className={`segment-btn${pageMode === m ? ' active' : ''}`}
+                      disabled={disabled}
+                      title={disabled ? '左右滚动需要触屏设备' : undefined}
+                      onClick={() => changePageMode(m)}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
