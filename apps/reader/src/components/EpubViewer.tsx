@@ -238,15 +238,18 @@ export default function EpubViewer({
         const ebook = ePub(buffer);
         bookRef.current = ebook;
         // axis 竖向翻页为 epubjs 运行时能力，官方类型声明缺失，此处断言绕过。
-        // 管理器统一用 continuous：预加载相邻章节，跨章翻页即时化
+        // 管理器按模式选择：上下无缝用 continuous（跨章连续加载），
+        // 其余模式用 default（单章管理，翻页轻量）；continuous 与
+        // paginated flow 组合存在已知加载问题，不可混用
+        const isVertContinuous =
+          mode === 'swipe' &&
+          swipeLayoutRef.current === 'vertical' &&
+          verticalStyleRef.current === 'continuous';
         const renderOptions: any = {
           width: '100%',
           height: '100%',
-          flow:
-            mode === 'swipe' && swipeLayoutRef.current === 'vertical'
-              ? 'scrolled'
-              : 'paginated',
-          manager: 'continuous',
+          flow: isVertContinuous ? 'scrolled' : 'paginated',
+          manager: isVertContinuous ? 'continuous' : 'default',
         };
         if (mode === 'swipe' && swipeLayoutRef.current === 'vertical' && verticalStyleRef.current === 'paged') {
           renderOptions.axis = 'vertical';
@@ -280,8 +283,9 @@ export default function EpubViewer({
           applyTapZonesRef.current();
         }
 
-        // iframe 内按键代理
-        localRendition.on('keyup', (e: KeyboardEvent) =>
+        // iframe 内按键代理：keydown（按下瞬间）即触发翻页，
+        // 若挂 keyup 则要等松手才翻页，手感极差
+        localRendition.on('keydown', (e: KeyboardEvent) =>
           keyHandlerRef.current(e),
         );
         localRendition.on('relocated', onRelocated);
