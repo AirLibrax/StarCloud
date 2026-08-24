@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, StatusBar } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../App';
+import { colors } from '../theme';
 import { fileUrl, reportProgress } from '../api/client';
 import { ensureCachedFile } from '../api/file-cache';
 import { saveLocalProgress, listLocalBooks } from '../storage/local-books';
@@ -59,23 +61,25 @@ export default function ReaderScreen() {
   const fontPx = (FONT_STEPS[prefs.fontStep] / 100) * 17;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fbf7ee' }}>
+    <View style={{ flex: 1, backgroundColor: colors.sheet }}>
       {/* 顶栏：返回 | 书名 | 设置齿轮 */}
       <View
         style={{
           paddingTop: 46,
-          backgroundColor: '#2a2622',
+          backgroundColor: colors.card,
           paddingHorizontal: 12,
           paddingBottom: 8,
+          borderBottomWidth: 0.5,
+          borderBottomColor: colors.border,
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={{ width: 70 }}>
-            <Text style={{ color: '#9fb8c9', fontSize: 15 }}>← 书架</Text>
+            <Text style={{ color: colors.accent, fontSize: 15 }}>← 书架</Text>
           </TouchableOpacity>
           <Text
             numberOfLines={1}
-            style={{ color: '#d8cfbe', fontSize: 14, flex: 1, textAlign: 'center' }}
+            style={{ color: colors.textLight, fontSize: 14, flex: 1, textAlign: 'center' }}
           >
             {title}
           </Text>
@@ -83,7 +87,7 @@ export default function ReaderScreen() {
             onPress={() => setSettingsOpen((v) => !v)}
             style={{ width: 40, alignItems: 'flex-end' }}
           >
-            <Text style={{ color: '#9fb8c9', fontSize: 16 }}>⚙</Text>
+            <Text style={{ color: colors.accent, fontSize: 16 }}>⚙</Text>
           </TouchableOpacity>
         </View>
 
@@ -91,63 +95,98 @@ export default function ReaderScreen() {
           <View
             style={{
               marginTop: 10,
-              backgroundColor: '#332e28',
+              backgroundColor: colors.card,
               borderRadius: 8,
+              borderWidth: 0.5,
+              borderColor: colors.border,
               padding: 14,
-              gap: 12,
+              gap: 16,
             }}
           >
-            <SettingRow
-              label={`字号 ${FONT_STEPS[prefs.fontStep]}%`}
-              onPrev={() =>
-                patchPrefs({ fontStep: Math.max(0, prefs.fontStep - 1) })
-              }
-              onNext={() =>
-                patchPrefs({
-                  fontStep: Math.min(FONT_STEPS.length - 1, prefs.fontStep + 1),
-                })
-              }
+            <SettingSlider
+              label="字号"
+              value={`${FONT_STEPS[prefs.fontStep]}%`}
+              max={FONT_STEPS.length - 1}
+              valueIdx={prefs.fontStep}
+              onChange={(v) => patchPrefs({ fontStep: v })}
             />
-            <SettingRow
-              label={`行距 ${LINE_HEIGHTS[prefs.lineHeightIdx]}`}
-              onPrev={() =>
-                patchPrefs({
-                  lineHeightIdx: Math.max(0, prefs.lineHeightIdx - 1),
-                })
-              }
-              onNext={() =>
-                patchPrefs({
-                  lineHeightIdx:
-                    Math.min(LINE_HEIGHTS.length - 1, prefs.lineHeightIdx + 1),
-                })
-              }
+            <SettingSlider
+              label="行距"
+              value={`${LINE_HEIGHTS[prefs.lineHeightIdx]} 倍`}
+              max={LINE_HEIGHTS.length - 1}
+              valueIdx={prefs.lineHeightIdx}
+              onChange={(v) => patchPrefs({ lineHeightIdx: v })}
             />
-            <SettingRow
-              label={`边距 ${MARGINS[prefs.marginIdx]}px`}
-              onPrev={() =>
-                patchPrefs({ marginIdx: Math.max(0, prefs.marginIdx - 1) })
-              }
-              onNext={() =>
-                patchPrefs({ marginIdx: Math.min(MARGINS.length - 1, prefs.marginIdx + 1) })
-              }
+            <SettingSlider
+              label="边距"
+              value={`${MARGINS[prefs.marginIdx]}px`}
+              max={MARGINS.length - 1}
+              valueIdx={prefs.marginIdx}
+              onChange={(v) => patchPrefs({ marginIdx: v })}
             />
-            <SettingRow
-              label={`排版 ${describePageMode(prefs)}`}
-              onPrev={() =>
-                patchPrefs(
-                  prefs.pageMode === 'paged'
-                    ? { pageMode: 'scrolled' }
-                    : { pageMode: 'paged' },
-                )
-              }
-              onNext={() =>
-                patchPrefs(
-                  prefs.pageMode === 'paged'
-                    ? { pageMode: 'scrolled' }
-                    : { pageMode: 'paged' },
-                )
-              }
-            />
+
+            <View>
+              <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                翻页方式
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <SegmentBtn
+                  label="分页式"
+                  active={prefs.pageMode === 'paged'}
+                  onPress={() => patchPrefs({ pageMode: 'paged' })}
+                />
+                <SegmentBtn
+                  label="滚动式"
+                  active={prefs.pageMode === 'scrolled'}
+                  onPress={() => patchPrefs({ pageMode: 'scrolled' })}
+                />
+              </View>
+            </View>
+
+            {prefs.pageMode === 'paged' && fileType !== 'epub' && (
+              <View>
+                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                  翻页轴向
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SegmentBtn
+                    label="左右翻页"
+                    active={prefs.pageAxis === 'horizontal'}
+                    onPress={() => patchPrefs({ pageAxis: 'horizontal' })}
+                  />
+                  <SegmentBtn
+                    label="上下翻页"
+                    active={prefs.pageAxis === 'vertical'}
+                    onPress={() => patchPrefs({ pageAxis: 'vertical' })}
+                  />
+                </View>
+                {prefs.pageAxis === 'horizontal' && (
+                  <View style={{ marginTop: 10 }}>
+                    <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                      滑动方向
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <SegmentBtn
+                        label="向左滑下一页"
+                        active={prefs.swipeDirection === 'left-next'}
+                        onPress={() => patchPrefs({ swipeDirection: 'left-next' })}
+                      />
+                      <SegmentBtn
+                        label="向右滑下一页"
+                        active={prefs.swipeDirection === 'right-next'}
+                        onPress={() => patchPrefs({ swipeDirection: 'right-next' })}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {fileType === 'epub' && (
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                EPUB 由渲染引擎处理滑动与点击翻页。
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -193,33 +232,67 @@ function describePageMode(p: {
   return `分页·${axis}${dir}`;
 }
 
-function SettingRow({
+function SettingSlider({
   label,
-  onPrev,
-  onNext,
+  value,
+  max,
+  valueIdx,
+  onChange,
 }: {
   label: string;
-  onPrev: () => void;
-  onNext: () => void;
+  value: string;
+  max: number;
+  valueIdx: number;
+  onChange: (idx: number) => void;
 }) {
   return (
-    <View
+    <View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+        <Text style={{ color: colors.textLight, fontSize: 13 }}>{label}</Text>
+        <Text style={{ color: colors.accentDark, fontSize: 13 }}>
+          {value}
+        </Text>
+      </View>
+      <Slider
+        minimumValue={0}
+        maximumValue={max}
+        step={1}
+        value={valueIdx}
+        onSlidingComplete={(v: number) => onChange(v)}
+        minimumTrackTintColor={colors.accent}
+        maximumTrackTintColor={colors.border}
+        thumbTintColor={colors.accent}
+      />
+    </View>
+  );
+}
+
+function SegmentBtn({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
       style={{
-        flexDirection: 'row',
+        flex: 1,
+        paddingVertical: 6,
         alignItems: 'center',
-        justifyContent: 'space-between',
+        borderRadius: 5,
+        backgroundColor: active ? colors.accent : colors.card,
+        borderWidth: 0.5,
+        borderColor: active ? colors.accent : colors.border,
       }}
     >
-      <Text style={{ color: '#d8cfbe', fontSize: 14 }}>{label}</Text>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <TouchableOpacity onPress={onPrev} style={{ paddingHorizontal: 12 }}>
-          <Text style={{ color: '#9fb8c9', fontSize: 15 }}>−</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={onNext} style={{ paddingHorizontal: 12 }}>
-          <Text style={{ color: '#9fb8c9', fontSize: 15 }}>＋</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      <Text style={{ color: active ? '#fffdf7' : colors.textLight, fontSize: 13 }}>
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
