@@ -494,33 +494,6 @@ export default function EpubViewer({
                 </button>
               </div>
             </div>
-
-            <div className="setting-row">
-              <div className="setting-label">
-                <span>单双列</span>
-                <span>{twoUp ? '双列' : '单列'}</span>
-              </div>
-              <div className="segment-group">
-                <button
-                  className={`segment-btn${!twoUp ? ' active' : ''}`}
-                  onClick={() => {
-                    if (twoUp) toggleSpread();
-                  }}
-                  disabled={!twoUp}
-                >
-                  单列
-                </button>
-                <button
-                  className={`segment-btn${twoUp ? ' active' : ''}`}
-                  onClick={() => {
-                    if (!twoUp) toggleSpread();
-                  }}
-                  disabled={twoUp}
-                >
-                  双列
-                </button>
-              </div>
-            </div>
           </div>
         </>
       )}
