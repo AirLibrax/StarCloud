@@ -83,6 +83,7 @@ export default function EpubViewer({
    *  通过 ref 让回调始终拿到最新值，而不触发渲染器重建 */
   const fontSizeRef = useRef(FONT_STEPS[stepIndex] ?? 100);
   const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  const lastNavAtRef = useRef(0);
 
   const goPrev = useCallback(() => renditionRef.current?.prev(), []);
   const goNext = useCallback(() => renditionRef.current?.next(), []);
@@ -188,21 +189,17 @@ export default function EpubViewer({
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
         });
-        // 书页 iframe 内的按键不会冒泡到父页面，由 epubjs 代理出来
-        localRendition.on('keyup', (e: KeyboardEvent) =>
-          keyHandlerRef.current(e),
-        );
-        // 手机：书页内点击边缘区域翻页（iframe 内点击不冒泡，同由 epubjs 代理）
+        // 手机：书页内点击左/右边缘区域翻页。
+        // 冷却期防止引擎内置行为与自定义处理叠加导致连翻
         localRendition.on('click', (e: any) => {
+          const now = Date.now();
+          if (now - lastNavAtRef.current < 400) return;
+          lastNavAtRef.current = now;
           const w = window.innerWidth;
           const x = e.clientX ?? 0;
-          if (x < w * 0.3) goPrev();
-          else if (x > w * 0.7) goNext();
+          if (x < w * 0.25) goPrev();
+          else if (x > w * 0.75) goNext();
         });
-        // 书页 iframe 内的按键不会冒泡到父页面，由 epubjs 代理出来
-        localRendition.on('keyup', (e: KeyboardEvent) =>
-          keyHandlerRef.current(e),
-        );
 
         // spine 是懒加载的：先等 ready 才能读章节数与定位
         await ebook.ready;
