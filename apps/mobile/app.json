@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "星辰云图书馆",
+    "slug": "starcloud",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.airlibrax.starcloud"
+    },
+    "plugins": [
+      "expo-sqlite"
+    ]
+  }
+}

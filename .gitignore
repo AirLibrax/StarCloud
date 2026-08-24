@@ -18,6 +18,9 @@ uploads/
 # 日志
 *.log
 
+# 临时文件目录
+_tmp/
+
 # 系统杂项
 .DS_Store
 Thumbs.db

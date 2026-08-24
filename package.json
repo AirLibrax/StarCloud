@@ -13,6 +13,7 @@
   "scripts": {
     "dev:server": "npm run start:dev --workspace @starcloud/server",
     "dev:admin": "npm run dev --workspace @starcloud/admin",
+    "dev:reader": "npm run dev --workspace @starcloud/reader",
     "dev:mobile": "npm run start --workspace @starcloud/mobile",
     "build": "npm run build --workspaces --if-present"
   }
