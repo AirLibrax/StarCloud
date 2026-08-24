@@ -225,12 +225,12 @@ export default function EpubViewer({
       // 下箭头恒为下一页，上箭头恒为上一页（规格三）
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        goNext();
+        navigateCooldownRef.current('next');
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        goPrev();
+        navigateCooldownRef.current('prev');
         return;
       }
       // 左右箭头跟随方向偏好（规格三：left-next 时 → 为下一页）：
