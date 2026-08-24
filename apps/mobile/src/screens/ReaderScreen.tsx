@@ -448,6 +448,7 @@ function EpubPane({
           initialPercentage,
           fontSizePct: FONT_STEPS[prefs.fontStep],
           lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
+          pageMode: prefs.pageMode,
         });
         if (!cancelled) setHtml(h);
       } catch (err) {
@@ -462,7 +463,7 @@ function EpubPane({
   }, [bookKey, fileUri]);
 
   // 排版/方向变化：重建阅读页或更新引擎变量
-  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.swipeDirection}`;
+  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.pageMode}`;
   const firstStyle = useRef(true);
   useEffect(() => {
     if (firstStyle.current || !html) {
@@ -474,6 +475,7 @@ function EpubPane({
       initialPercentage,
       fontSizePct: FONT_STEPS[prefs.fontStep],
       lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
+      pageMode: prefs.pageMode,
     }).then((h) => {
       if (!cancelledRef.current) setHtml(h);
     });
@@ -714,6 +716,7 @@ function TxtPane({
               e.nativeEvent.locationY,
               w,
               h,
+              prefs.swipeDirection,
             );
             const target = dir === 'next' ? i + 1 : i - 1;
             if (target >= 0 && target < pages.length) {

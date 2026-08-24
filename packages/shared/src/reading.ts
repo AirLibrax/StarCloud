@@ -26,9 +26,9 @@ export const MARGINS = [10, 24, 48, 80];
 export type PageMode = 'tap' | 'scroll-vertical' | 'scroll-horizontal';
 
 /**
- * 滑动/点击方向偏好（仅 tap 与 scroll-horizontal 模式下有意义）：
- * - left-next: 向左滑（或点左侧）为下一页 —— 默认
- * - right-next: 向右滑（或点右侧）为下一页
+ * 方向偏好：「向左下一页」= 下一页位于当前页左侧
+ * （日式漫画方向：点左侧 / 手指从左向右滑 = 下一页）；
+ * 「向右下一页」为常规中文书方向。
  */
 export type SwipeDirection = 'left-next' | 'right-next';
 
@@ -46,9 +46,12 @@ const TRIANGLE_HEIGHT_PX = 76;
  * 判定一次点击落在哪个翻页区。
  *
  * 屏幕划分为倒 Y 字型三区：
- * - 底部三角区（左下角、中线距底 2cm 点、右下角三点围成）：下一页
- * - 其余部分以中垂线分界：左半 = 上一页，右半 = 下一页
+ * - 底部三角区（左下角、中线距底 2cm 点、右下角三点围成）：恒为「下一页」，
+ *   不随方向偏好镜像；
+ * - 其余部分按中垂线分界，左右含义由方向偏好决定：
+ *   「向左下一页」→ 点左半为下一页；「向右下一页」→ 点右半为下一页。
  *
+ * @param direction 方向偏好
  * @returns 'prev' | 'next'
  */
 export function tapZoneAction(
@@ -56,17 +59,20 @@ export function tapZoneAction(
   y: number,
   width: number,
   height: number,
+  direction: SwipeDirection,
 ): 'prev' | 'next' {
   const mx = width / 2;
   const my = height - TRIANGLE_HEIGHT_PX;
 
-  // 底部三角区：位于中线高度以下，且在两条斜边之内
+  // 底部三角区：位于中线高度以下，且在两条斜边之内 —— 恒为下一页
   if (y >= my) {
     const leftEdgeY = height + ((my - height) * x) / mx;
     const rightEdgeY = height + ((my - height) * (width - x)) / mx;
     if (y >= leftEdgeY && y >= rightEdgeY) return 'next';
   }
 
-  // 其余区域按中垂线分界
-  return x < width / 2 ? 'prev' : 'next';
+  // 其余区域按中垂线分界 + 方向偏好镜像
+  const onLeft = x < width / 2;
+  if (direction === 'left-next') return onLeft ? 'next' : 'prev';
+  return onLeft ? 'prev' : 'next';
 }

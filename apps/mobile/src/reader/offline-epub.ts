@@ -5,6 +5,7 @@
  */
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
+import type { PageMode } from '@starcloud/shared';
 
 const vendorAssets = {
   jszip: require('../../assets/vendor/jszip.min.js.txt'),
@@ -32,6 +33,8 @@ export interface OfflineReaderOptions {
   initialPercentage: number;
   fontSizePct: number;
   lineHeight: number;
+  /** 翻页方式（shared.PageMode） */
+  pageMode: PageMode;
 }
 
 /**
@@ -64,15 +67,22 @@ window.onerror = function(msg, src, line) {
 window.__initialPct = ${opts.initialPercentage};
 window.__fontPct = ${opts.fontSizePct};
 window.__lineHeight = ${opts.lineHeight};
+window.__pageMode = "${opts.pageMode}";
+window.__swipeLeftNext = ${opts.pageMode === 'tap' || opts.pageMode === 'scroll-horizontal' ? 'false' : 'true'};
+function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__chunks = [];
 window.__pushChunk = function(c) { window.__chunks.push(c); };
-window.__swipeLeftNext = true;
-function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__openBook = function() {
   try {
     var b64 = window.__chunks.join('');
     var book = ePub(b64, { encoding: 'base64' });
-    var rendition = book.renderTo('viewer', { width: '100%', height: '100%', spread: 'none' });
+    var isScroll = window.__pageMode === 'scroll-vertical';
+    var rendition = book.renderTo('viewer', {
+      width: '100%', height: '100%',
+      flow: isScroll ? 'scrolled' : 'paginated',
+      manager: isScroll ? 'continuous' : 'default',
+      spread: 'none'
+    });
     rendition.themes.register('paper', {
       body: {
         background: '#fbf7ee',
@@ -96,7 +106,8 @@ window.__openBook = function() {
       var dx = e.changedTouches[0].clientX - tsX;
       var dy = e.changedTouches[0].clientY - tsY;
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-        var isNext = (dx < 0) === window.__swipeLeftNext;
+        // 「向左下一页」= 手指从左向右滑为下一页；「向右下一页」反之
+        var isNext = (dx > 0) !== window.__swipeLeftNext;
         if (isNext) rendition.next(); else rendition.prev();
       }
       tsX = null;

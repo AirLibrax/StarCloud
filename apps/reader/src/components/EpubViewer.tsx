@@ -245,6 +245,8 @@ export default function EpubViewer({
           width: '100%',
           height: '100%',
           flow,
+          // 上下滚动模式：连续渲染跨章内容，滚到底自动接下一章
+          manager: pageModeRef.current === 'scroll-vertical' ? 'continuous' : 'default',
           spread: twoUpRef.current ? 'always' : 'none',
         });
         renditionRef.current = localRendition;
@@ -285,15 +287,18 @@ export default function EpubViewer({
         );
 
         // 点击翻页模式：倒 Y 分区（坐标由引擎从 iframe 转发），
-        // 方向偏好生效：right-next 时点击分区含义镜像
+        // 三角区恒为下一页；左右分区含义随方向偏好镜像
         localRendition.on('click', (e: any) => {
           if (pageModeRef.current !== 'tap') return;
           const w = window.innerWidth;
           const h = window.innerHeight;
-          let dir = tapZoneAction(e.clientX ?? 0, e.clientY ?? 0, w, h);
-          if (swipeDirRef.current === 'right-next') {
-            dir = dir === 'next' ? 'prev' : 'next';
-          }
+          const dir = tapZoneAction(
+            e.clientX ?? 0,
+            e.clientY ?? 0,
+            w,
+            h,
+            swipeDirRef.current,
+          );
           navigateWithCooldown(dir);
         });
 
@@ -565,20 +570,20 @@ export default function EpubViewer({
               <div className="setting-row">
                 <div className="setting-label">
                   <span>方向</span>
-                  <span>{swipeDir === 'left-next' ? '向左滑下一页' : '向右滑下一页'}</span>
+                  <span>{swipeDir === 'left-next' ? '向左下一页' : '向右下一页'}</span>
                 </div>
                 <div className="segment-group">
                   <button
                     className={`segment-btn${swipeDir === 'left-next' ? ' active' : ''}`}
                     onClick={() => changeDirection('left-next')}
                   >
-                    向左滑下一页
+                    向左下一页
                   </button>
                   <button
                     className={`segment-btn${swipeDir === 'right-next' ? ' active' : ''}`}
                     onClick={() => changeDirection('right-next')}
                   >
-                    向右滑下一页
+                    向右下一页
                   </button>
                 </div>
               </div>
