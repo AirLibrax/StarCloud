@@ -157,16 +157,16 @@ export default function ReaderScreen() {
             {prefs.pageMode === 'tap' && (
               <View>
                 <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
-                  方向
+                  翻页方向
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <SegmentBtn
-                    label="向左滑下一页"
+                    label="向左下一页"
                     active={prefs.swipeDirection === 'left-next'}
                     onPress={() => patchPrefs({ swipeDirection: 'left-next' })}
                   />
                   <SegmentBtn
-                    label="向右滑下一页"
+                    label="向右下一页"
                     active={prefs.swipeDirection === 'right-next'}
                     onPress={() => patchPrefs({ swipeDirection: 'right-next' })}
                   />
@@ -189,6 +189,27 @@ export default function ReaderScreen() {
                     label="上下滑动"
                     active={prefs.swipeLayout === 'vertical'}
                     onPress={() => patchPrefs({ swipeLayout: 'vertical' })}
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* 冻结规格五：swipe/horizontal 同样显示「翻页方向」 */}
+            {prefs.pageMode === 'swipe' && prefs.swipeLayout === 'horizontal' && (
+              <View>
+                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                  翻页方向
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SegmentBtn
+                    label="向左下一页"
+                    active={prefs.swipeDirection === 'left-next'}
+                    onPress={() => patchPrefs({ swipeDirection: 'left-next' })}
+                  />
+                  <SegmentBtn
+                    label="向右下一页"
+                    active={prefs.swipeDirection === 'right-next'}
+                    onPress={() => patchPrefs({ swipeDirection: 'right-next' })}
                   />
                 </View>
               </View>

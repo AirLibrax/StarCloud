@@ -7,8 +7,8 @@
  * - tap / swipe+horizontal：页面对指针透明（.sc-no-pointer，同 Web .no-pointer），
  *   手势桥接 JS 在宿主 document 上判定原始手势（touchstart/touchend），
  *   postMessage 回 RN，由 RN 按 shared 模型判定语义并回注 __scNav() 执行翻页；
- * - swipe+vertical：flow=scrolled + manager=default（与 Web 相同的映射表），
- *   引擎原生滚动，无桥接。
+ * - swipe+vertical：flow=scrolled + manager=continuous（与 Web 相同的映射表），
+ *   整章连成一条无缝滚动、滚到底自动接下一章，引擎原生滚动，无桥接。
  * 键盘通道不需要（纯触屏）。
  */
 import { Asset } from 'expo-asset';
@@ -67,8 +67,8 @@ export async function buildOfflineEpubHtml(
   const safeJszip = jszip.replace(/<\/script>/gi, '<\\/script>');
   const safeEpub = epub.replace(/<\/script>/gi, '<\\/script>');
 
-  // 与 Web EpubViewer 相同的 flow/manager 映射表：
-  // tap / swipe+horizontal → paginated + default；swipe+vertical → scrolled + default
+  // 与 Web EpubViewer 相同的映射表（冻结规格二/五）：
+  // tap / swipe+horizontal → paginated + default；swipe+vertical → scrolled + continuous
   const isVerticalScroll = opts.pageMode === 'swipe' && opts.swipeLayout === 'vertical';
   // 需要手势桥接的模式（tap / swipe+horizontal）：页面对指针透明，与 Web .no-pointer 同理
   const needsBridge = !isVerticalScroll;
@@ -110,7 +110,7 @@ window.__openBook = function() {
     var rendition = book.renderTo('viewer', {
       width: '100%', height: '100%',
       flow: isScroll ? 'scrolled' : 'paginated',
-      manager: 'default',
+      manager: isScroll ? 'continuous' : 'default',
       spread: 'none'
     });
     window.__rendition = rendition;
