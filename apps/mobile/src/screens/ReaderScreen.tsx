@@ -5,7 +5,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../App';
 import { fileUrl, reportProgress } from '../api/client';
-import { saveLocalProgress } from '../storage/local-books';
+import { ensureCachedFile } from '../api/file-cache';
+import { saveLocalProgress, listLocalBooks } from '../storage/local-books';
 import {
   getReadingPrefs,
   updateReadingPrefs,
@@ -15,7 +16,9 @@ import {
   type ReadingPrefs,
 } from '../storage/reading-prefs';
 
-type Route = RouteProp<RootStackParamList, 'Reader'>;
+import { buildOfflineEpubHtml, updateOfflineEpubStyle } from '../reader/offline-epub';
+
+ type Route = RouteProp<RootStackParamList, 'Reader'>;
 
 /**
  * 阅读器（规格 F4/F5）：
@@ -152,12 +155,10 @@ export default function ReaderScreen() {
       {!fileType && null}
 
       {fileType === 'epub' && (
-        <EpubPane
-          src={
-            source === 'cloud'
-              ? fileUrl(bookId!)
-              : (localId ?? '')
-          }
+        <EpubLoader
+          source={source}
+          bookId={bookId}
+          localId={localId}
           initialPercentage={initialPercentage}
           prefs={prefs}
           onProgress={onProgress}
@@ -222,66 +223,163 @@ function SettingRow({
   );
 }
 
-/* ---------------- EPUB ---------------- */
+/* ---------------- EPUB（离线渲染管线） ---------------- */
 
-function EpubPane({
-  src,
+/**
+ * 确定文件来源：本地书直接用私有目录文件；
+ * 云端书先静默缓存到临时目录（可随时清理，不影响书库），再统一走离线渲染。
+ */
+function EpubLoader({
+  source,
+  bookId,
+  localId,
   initialPercentage,
   prefs,
   onProgress,
 }: {
-  src: string;
+  source: 'cloud' | 'local';
+  bookId?: number;
+  localId?: string;
+  initialPercentage: number;
+  prefs: ReadingPrefs;
+  onProgress: (page: number, total: number) => void;
+}) {
+  const [fileUri, setFileUri] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const uri =
+          source === 'local' && localId
+            ? (await listLocalBooks()).find((b) => b.id === localId)?.fileUri ?? null
+            : await ensureCachedFile(bookId!, 'epub');
+        if (!uri) throw new Error('找不到书籍文件');
+        if (!cancelled) setFileUri(uri);
+      } catch (err) {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [source, bookId, localId]);
+
+  if (error)
+    return (
+      <View style={{ flex: 1, padding: 24 }}>
+        <Text style={{ color: '#8b2c1f', fontSize: 14 }}>{error}</Text>
+      </View>
+    );
+  if (!fileUri)
+    return (
+      <View style={{ flex: 1, alignItems: 'center', paddingTop: 60 }}>
+        <Text style={{ color: '#6b6158' }}>正在获取书籍…</Text>
+      </View>
+    );
+
+  return (
+    <EpubPane
+      fileUri={fileUri}
+      bookKey={`b${bookId ?? localId}`}
+      initialPercentage={initialPercentage}
+      prefs={{ fontStep: prefs.fontStep, lineHeightIdx: prefs.lineHeightIdx }}
+      onProgress={onProgress}
+    />
+  );
+}
+
+function EpubPane({
+  fileUri,
+  bookKey,
+  initialPercentage,
+  prefs,
+  onProgress,
+}: {
+  fileUri: string;
+  bookKey: string;
   initialPercentage: number;
   prefs: { fontStep: number; lineHeightIdx: number };
   onProgress: (page: number, total: number) => void;
 }) {
-  // epubjs 由 CDN 加载；书籍地址注入渲染脚本
-  const html = `<!doctype html><html><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
-<style>body{margin:0;background:#fbf7ee}#viewer{width:100vw;height:100vh}</style>
-</head><body><div id="viewer"></div><script>
-try {
-  var book = ePub(${JSON.stringify(src)});
-  var rendition = book.renderTo("viewer", { width: "100%", height: "100%", spread: "none" });
-  rendition.themes.register("paper", {
-    body: { background: "#fbf7ee", "line-height": "${LINE_HEIGHTS[prefs.lineHeightIdx]} !important" },
-    p: { "line-height": "${LINE_HEIGHTS[prefs.lineHeightIdx]} !important", margin: "0.25em 0 !important" }
-  });
-  rendition.themes.select("paper");
-  rendition.on("relocated", function(loc) {
-    var total = book.spine.items.length;
-    var idx = loc.start ? loc.start.index : 0;
-    var pct = total > 0 ? Math.round(((idx + 1) / total) * 1000) / 10 : 0;
-    window.ReactNativeWebView.postMessage(JSON.stringify({ t: "progress", page: idx + 1, total: total, pct: pct }));
-  });
-  book.ready.then(function() {
-    var t = book.spine.items.length;
-    var start = Math.min(t - 1, Math.floor(${initialPercentage} / 100 * t));
-    return rendition.display(start > 0 ? start : 0);
-  }).then(function() {
-    window.ReactNativeWebView.postMessage(JSON.stringify({ t: "ready" }));
-  });
-} catch (err) {
-  window.ReactNativeWebView.postMessage(JSON.stringify({ t: "error", message: String(err) }));
-}
-</script></body></html>`;
+  const [htmlUri, setHtmlUri] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  // 组装自包含阅读页 HTML
+  useEffect(() => {
+    let cancelled = false;
+    setHtmlUri(null);
+    (async () => {
+      try {
+        const uri = await buildOfflineEpubHtml(bookKey, {
+          fileUri,
+          initialPercentage,
+          fontSizePct: FONT_STEPS[prefs.fontStep],
+          lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
+        });
+        if (!cancelled) setHtmlUri(uri);
+      } catch (err) {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookKey, fileUri]);
+
+  // 排版变化：更新样式并重载 WebView
+  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}`;
+  const firstStyle = useRef(true);
+  useEffect(() => {
+    if (firstStyle.current) {
+      firstStyle.current = false;
+      return;
+    }
+    updateOfflineEpubStyle(
+      bookKey,
+      FONT_STEPS[prefs.fontStep],
+      LINE_HEIGHTS[prefs.lineHeightIdx],
+    )
+      .then(() => setReloadTick((t) => t + 1))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styleKey]);
 
   function onMessage(e: any) {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg.t === 'progress') onProgress(msg.page, msg.total);
+      if (msg.t === 'error') setError(msg.message);
     } catch {
       // 非 JSON 忽略
     }
   }
 
+  if (error)
+    return (
+      <View style={{ flex: 1, padding: 24 }}>
+        <Text style={{ color: '#8b2c1f', fontSize: 14 }}>{error}</Text>
+      </View>
+    );
+
+  if (!htmlUri)
+    return (
+      <View style={{ flex: 1, alignItems: 'center', paddingTop: 60 }}>
+        <Text style={{ color: '#6b6158' }}>正在准备渲染引擎…</Text>
+      </View>
+    );
+
   return (
     <WebView
-      originWhitelist={['*']}
-      source={{ html }}
+      key={reloadTick}
+      source={{ uri: htmlUri }}
       onMessage={onMessage}
+      originWhitelist={['*']}
       javaScriptEnabled
       domStorageEnabled
       allowFileAccess

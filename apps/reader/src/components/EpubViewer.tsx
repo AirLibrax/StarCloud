@@ -176,6 +176,10 @@ export default function EpubViewer({
 
         let totalChapters = 0;
 
+        // 书页 iframe 内的按键不会冒泡到父页面，由 epubjs 代理出来
+        localRendition.on('keyup', (e: KeyboardEvent) =>
+          keyHandlerRef.current(e),
+        );
         localRendition.on('relocated', (location: any) => {
           const idx = location?.start?.index ?? 0;
           setChapter({ current: idx + 1, total: totalChapters });
@@ -183,6 +187,17 @@ export default function EpubViewer({
           // 新章节的 iframe 需要重新套用字号与行距
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
+        });
+        // 书页 iframe 内的按键不会冒泡到父页面，由 epubjs 代理出来
+        localRendition.on('keyup', (e: KeyboardEvent) =>
+          keyHandlerRef.current(e),
+        );
+        // 手机：书页内点击边缘区域翻页（iframe 内点击不冒泡，同由 epubjs 代理）
+        localRendition.on('click', (e: any) => {
+          const w = window.innerWidth;
+          const x = e.clientX ?? 0;
+          if (x < w * 0.3) goPrev();
+          else if (x > w * 0.7) goNext();
         });
         // 书页 iframe 内的按键不会冒泡到父页面，由 epubjs 代理出来
         localRendition.on('keyup', (e: KeyboardEvent) =>
@@ -299,9 +314,6 @@ export default function EpubViewer({
       <div className="epub-toolbar">
         <div className="toolbar-left">
           <Link to="/" className="btn">← 书架</Link>
-          <button className="btn" onClick={() => switchSpread()} disabled={!ready}>
-            {spreadLabel}
-          </button>
         </div>
         <span className="reader-progress reader-center">
           {loadError ??
@@ -312,6 +324,9 @@ export default function EpubViewer({
                 : '')}
         </span>
         <div className="toolbar-right">
+          <button className="btn" onClick={() => switchSpread()} disabled={!ready}>
+            {spreadLabel}
+          </button>
           <button
             className="btn icon-btn"
             disabled={!ready}
