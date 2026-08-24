@@ -19,9 +19,11 @@ import { UsersModule } from './users/users.module';
     }),
     // 生产部署：托管管理后台构建产物，全站一个进程
     // （admin/dist 不存在时此模块静默跳过，不影响开发）
+    // exclude 使用 path-to-regexp v8 通配语法（NestJS 11 / Express 5 下的
+    // @nestjs/serve-static 5.x）；v4 的 /api/(.*) 写法会抛 PathError。
     ServeStaticModule.forRoot({
       rootPath: resolve(__dirname, '..', '..', '..', 'apps', 'admin', 'dist'),
-      exclude: ['/api/(.*)'],
+      exclude: ['/api/{*splat}'],
     }),
     PrismaModule,
     AuthModule,
