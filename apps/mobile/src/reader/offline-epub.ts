@@ -66,6 +66,7 @@ window.__fontPct = ${opts.fontSizePct};
 window.__lineHeight = ${opts.lineHeight};
 window.__chunks = [];
 window.__pushChunk = function(c) { window.__chunks.push(c); };
+window.__swipeLeftNext = true;
 function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__openBook = function() {
   try {
@@ -78,6 +79,21 @@ window.__openBook = function() {
     });
     rendition.themes.select('paper');
     rendition.themes.fontSize(window.__fontPct + '%');
+    // 滑动翻页（方向可由 RN 侧动态修改 __swipeLeftNext）
+    var tsX = null, tsY = null;
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 1) { tsX = e.touches[0].clientX; tsY = e.touches[0].clientY; }
+    }, { passive: true });
+    document.addEventListener('touchend', function(e) {
+      if (tsX === null) return;
+      var dx = e.changedTouches[0].clientX - tsX;
+      var dy = e.changedTouches[0].clientY - tsY;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+        var isNext = (dx < 0) === window.__swipeLeftNext;
+        if (isNext) rendition.next(); else rendition.prev();
+      }
+      tsX = null;
+    }, { passive: true });
     rendition.on('relocated', function(loc) {
       var total = book.spine.items.length;
       var idx = loc.start ? loc.start.index : 0;

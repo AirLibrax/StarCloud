@@ -37,6 +37,7 @@ export default function ReaderScreen() {
     route.params;
   const [prefs, setPrefs] = useState(getReadingPrefs());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pageInfo, setPageInfo] = useState<{ page: number; total: number } | null>(null);
 
   function patchPrefs(patch: Parameters<typeof updateReadingPrefs>[0]) {
     updateReadingPrefs(patch).then(() => setPrefs(getReadingPrefs()));
@@ -46,6 +47,7 @@ export default function ReaderScreen() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onProgress = useCallback(
     (currentPage: number, totalPages: number) => {
+      setPageInfo({ page: currentPage, total: totalPages });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => {
         if (source === 'cloud' && bookId != null) {
@@ -94,13 +96,18 @@ export default function ReaderScreen() {
         {settingsOpen && (
           <View
             style={{
-              marginTop: 10,
+              position: 'absolute',
+              top: 96,
+              left: 12,
+              right: 12,
+              zIndex: 20,
               backgroundColor: colors.card,
               borderRadius: 8,
               borderWidth: 0.5,
               borderColor: colors.border,
               padding: 14,
               gap: 16,
+              elevation: 6,
             }}
           >
             <SettingSlider
@@ -160,32 +167,27 @@ export default function ReaderScreen() {
                     onPress={() => patchPrefs({ pageAxis: 'vertical' })}
                   />
                 </View>
-                {prefs.pageAxis === 'horizontal' && (
-                  <View style={{ marginTop: 10 }}>
-                    <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
-                      滑动方向
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <SegmentBtn
-                        label="向左滑下一页"
-                        active={prefs.swipeDirection === 'left-next'}
-                        onPress={() => patchPrefs({ swipeDirection: 'left-next' })}
-                      />
-                      <SegmentBtn
-                        label="向右滑下一页"
-                        active={prefs.swipeDirection === 'right-next'}
-                        onPress={() => patchPrefs({ swipeDirection: 'right-next' })}
-                      />
-                    </View>
-                  </View>
-                )}
               </View>
             )}
 
-            {fileType === 'epub' && (
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                EPUB 由渲染引擎处理滑动与点击翻页。
-              </Text>
+            {prefs.pageMode === 'paged' && (
+              <View>
+                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                  滑动方向（左右翻页时）
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SegmentBtn
+                    label="向左滑下一页"
+                    active={prefs.swipeDirection === 'left-next'}
+                    onPress={() => patchPrefs({ swipeDirection: 'left-next' })}
+                  />
+                  <SegmentBtn
+                    label="向右滑下一页"
+                    active={prefs.swipeDirection === 'right-next'}
+                    onPress={() => patchPrefs({ swipeDirection: 'right-next' })}
+                  />
+                </View>
+              </View>
             )}
           </View>
         )}
@@ -202,6 +204,53 @@ export default function ReaderScreen() {
           prefs={prefs}
           onProgress={onProgress}
         />
+      )}
+
+      {/* 底部页码标注 */}
+      {pageInfo && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: 14,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ color: colors.textMuted, fontSize: 12, backgroundColor: 'rgba(251,247,238,0.85)', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 }}>
+            {pageInfo.page}/{pageInfo.total} 页
+          </Text>
+        </View>
+      )}
+
+      {fileType === 'epub' && (
+        <EpubLoader
+          source={source}
+          bookId={bookId}
+          localId={localId}
+          initialPercentage={initialPercentage}
+          prefs={prefs}
+          onProgress={onProgress}
+        />
+      )}
+
+      {/* 底部页码标注 */}
+      {pageInfo && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: 14,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ color: colors.textMuted, fontSize: 12, backgroundColor: 'rgba(251,247,238,0.85)', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 }}>
+            {pageInfo.page}/{pageInfo.total} 页
+          </Text>
+        </View>
       )}
 
       {fileType === 'pdf' && (
@@ -358,7 +407,7 @@ function EpubLoader({
       fileUri={fileUri}
       bookKey={`b${bookId ?? localId}`}
       initialPercentage={initialPercentage}
-      prefs={{ fontStep: prefs.fontStep, lineHeightIdx: prefs.lineHeightIdx }}
+      prefs={prefs}
       onProgress={onProgress}
     />
   );
@@ -374,7 +423,7 @@ function EpubPane({
   fileUri: string;
   bookKey: string;
   initialPercentage: number;
-  prefs: { fontStep: number; lineHeightIdx: number };
+  prefs: ReadingPrefs;
   onProgress: (page: number, total: number) => void;
 }) {
   const webRef = useRef<WebView>(null);
@@ -406,8 +455,8 @@ function EpubPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookKey, fileUri]);
 
-  // 排版变化：重建阅读页
-  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}`;
+  // 排版/方向变化：重建阅读页或更新引擎变量
+  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.swipeDirection}`;
   const firstStyle = useRef(true);
   useEffect(() => {
     if (firstStyle.current || !html) {
