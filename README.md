@@ -10,8 +10,8 @@
 |------|------|------|
 | `apps/server` 后端 API | ✅ 完成 | 认证 / 书籍 / 进度 / 用户管理 |
 | `apps/admin` 管理后台 | ✅ 完成 | 登录、书籍上传、列表、删除 |
-| `apps/reader` Web 阅读端 | ✅ 基本完成 | TXT / PDF 已支持；EPUB 渲染器已接入 |
-| `apps/mobile` 安卓 App | 🚧 暂未完成 | 计划使用 Expo + React Native，[功能规格](docs/mobile-spec.md)已冻结 |
+| `apps/reader` Web 阅读端 | ✅ 基本完成 | TXT / PDF / EPUB 均已支持；交互规格见 [docs/reader-interaction.md](docs/reader-interaction.md) |
+| `apps/mobile` 安卓 App | 🔶 可用（第一版） | Expo + RN；本地导入 + 云端书架 + 离线阅读；阅读交互已对齐 shared 模型（见 [docs/mobile-spec.md](docs/mobile-spec.md)）；待办：真机手感打磨、PDF 离线、双列排版 |
 | 部署配置 | ⏳ 暂未完成 | 生产部署脚本与 HTTPS 配置待补充 |
 
 ## 架构
@@ -37,15 +37,18 @@ StarCloud/
 │   ├── admin/           ✅ 管理后台（Vite 7 + React 19 + TypeScript）
 │   │   └── 构建产物由后端托管，部署后与 API 同域
 │   │
-│   ├── reader/          🔶 Web 阅读端（Vite 7 + React 19 + TypeScript）
-│   │   ├── EPUB: epubjs 渲染，章节级进度定位
+│   ├── reader/          ✅ Web 阅读端（Vite 7 + React 19 + TypeScript）
+│   │   ├── EPUB: epubjs 渲染，章节级进度定位；点击/滑动/键盘翻页
 │   │   ├── PDF:  浏览器原生渲染（iframe + query token）
 │   │   └── TXT:  滚动式阅读，滚动位置换算进度
+│   │   交互规格（翻页方式/方向/双列排版）见 docs/reader-interaction.md
 │   │
-│   └── mobile/          🚧 暂未完成。计划 Expo + React Native：
+│   └── mobile/          🔶 安卓 App（Expo + RN），第一版可用：
 │                          双书源（本地导入 + 云端书架）、零多余权限、
-│                          分页式/滚动式双翻页引擎。
-│                          详见 docs/mobile-spec.md
+│                          离线 EPUB（WebView 内嵌 epubjs）/ TXT 原生渲染；
+│                          阅读交互与 Web 端共享同一套类型与常量
+│                          （@starcloud/shared，见 docs/mobile-spec.md）。
+│                          待办：PDF 离线、双列排版、真机手感打磨
 │
 ├── packages/
 │   └── shared/          ✅ 三端共用的 TypeScript 类型定义
@@ -80,6 +83,9 @@ NestJS 后端（端口 3000）
   卷数从标题/文件名启发式识别（第N卷 / Vol.N / 结尾数字等）。
 - **排版设置**：字号八档、行距四档、页边距四档，全部离散档位并持久化到本地，
   行距通过向章节 iframe 注入 `!important` 样式压过书籍自带 CSS，避免裁切。
+- **阅读交互三端同源**：翻页方式 / 滑动轴向 / 方向偏好 / 点击分区等语义
+  只定义在 `@starcloud/shared/reading.ts`（含 `tapZoneAction()`），
+  Web 与 App 阅读器直接引用，不各自硬编码档位或区域规则。
 - **软删除**：用户停用为标记位，阅读记录保留；删书时进度随外键级联清理。
 
 ## 快速开始
