@@ -340,6 +340,15 @@ export default function EpubViewer({
     rendition.display(cfi ?? undefined);
   }
 
+  /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置 */
+  function changePageMode(mode: PageMode) {
+    if (mode === pageMode || !ready) return;
+    setPageMode(mode);
+    pageModeRef.current = mode;
+    localStorage.setItem(MODE_KEY, mode);
+    setRebuildTick((t) => t + 1);
+  }
+
   // 触摸滑动（滑动翻页模式）：横滑与纵滑都判定，取位移主轴
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   function onTouchStart(e: React.TouchEvent) {
@@ -463,6 +472,27 @@ export default function EpubViewer({
                 value={marginIdx}
                 onChange={(e) => setMarginIdx(Number(e.target.value))}
               />
+            </div>
+
+            <div className="setting-row">
+              <div className="setting-label">
+                <span>翻页方式</span>
+                <span>{pageMode === 'tap' ? '点击翻页' : '滑动翻页'}</span>
+              </div>
+              <div className="segment-group">
+                <button
+                  className={`segment-btn${pageMode === 'tap' ? ' active' : ''}`}
+                  onClick={() => changePageMode('tap')}
+                >
+                  点击翻页
+                </button>
+                <button
+                  className={`segment-btn${pageMode === 'swipe' ? ' active' : ''}`}
+                  onClick={() => changePageMode('swipe')}
+                >
+                  滑动翻页
+                </button>
+              </div>
             </div>
 
             <div className="setting-row">
