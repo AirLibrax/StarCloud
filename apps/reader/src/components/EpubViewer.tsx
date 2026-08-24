@@ -320,8 +320,9 @@ export default function EpubViewer({
   }, [bookId, rebuildTick]);
 
   useEffect(() => {
-    window.addEventListener('keyup', keyHandler);
-    return () => window.removeEventListener('keyup', keyHandler);
+    // 键盘按下瞬间即触发翻页（不用 keyup：等松手才翻页手感极差）
+    window.addEventListener('keydown', keyHandler);
+    return () => window.removeEventListener('keydown', keyHandler);
   }, [keyHandler]);
 
   useEffect(() => {
@@ -485,14 +486,17 @@ export default function EpubViewer({
   return (
     <div
       className="epub-viewer"
+      tabIndex={-1}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       onClick={(e) => {
         // 点击翻页模式：书页 iframe 已对指针事件透明，
-        // 所有点击落在外层容器，按左右两半分区判定
+        // 所有点击落在外层容器，按左右两半分区判定；
+        // 同时把焦点拉回外层，保证后续按键走外层 keydown 通道
         if (pageMode !== 'tap' || !ready) return;
         const target = e.target as HTMLElement;
         if (target.closest('.epub-toolbar') || target.closest('.settings-panel')) return;
+        (e.currentTarget as HTMLElement).focus();
         const dir = tapZoneAction(e.clientX, window.innerWidth, swipeDir);
         navigateWithCooldown(dir);
       }}
