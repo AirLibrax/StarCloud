@@ -456,31 +456,37 @@ export default function EpubViewer({
     localStorage.setItem(DIR_KEY, dir);
   }
 
-  // 触摸滑动（仅滑动翻页的左右轴向；上下轴向由引擎自然处理）
-  const touchStartX = useRef<number | null>(null);
+  // 触摸滑动（滑动翻页模式）：
+  // - 左右轴向：横向滑动判定
+  // - 上下轴向·单页翻动：纵向滑动判定（上推=下一页）
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   function onTouchStart(e: React.TouchEvent) {
-    touchStartX.current =
-      pageMode === 'swipe' && swipeLayout === 'horizontal'
-        ? e.touches[0].clientX
-        : null;
+    if (pageMode !== 'swipe' || !ready) return;
+    const t = e.touches[0];
+    touchStart.current = { x: t.clientX, y: t.clientY };
   }
   function onTouchEnd(e: React.TouchEvent) {
-    if (
-      touchStartX.current === null ||
-      pageMode !== 'swipe' ||
-      swipeLayout !== 'horizontal' ||
-      !ready
-    ) {
-      touchStartX.current = null;
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (pageMode !== 'swipe' || !ready || !start) return;
+
+    if (swipeLayout === 'horizontal') {
+      // 左右滑动：「向左下一页」= 从左向右滑；「向右下一页」反之
+      const dx = e.changedTouches[0].clientX - start.x;
+      if (Math.abs(dx) > 50) {
+        const isNext = (dx > 0) === (swipeDir === 'left-next');
+        isNext ? goNext() : goPrev();
+      }
       return;
     }
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(dx) > 50) {
-      // 「向左下一页」= 从左向右滑（dx>0）；「向右下一页」反之
-      const isNext = (dx > 0) === (swipeDir === 'left-next');
-      isNext ? goNext() : goPrev();
+
+    if (verticalStyle === 'paged') {
+      // 上下滑动·单页翻动：手指上推（dy<0）= 下一页，下拉 = 上一页
+      const dy = e.changedTouches[0].clientY - start.y;
+      if (dy < -50) goNext();
+      else if (dy > 50) goPrev();
     }
-    touchStartX.current = null;
+    // vertical + continuous：引擎原生滚动，无需手势处理
   }
 
   return (
