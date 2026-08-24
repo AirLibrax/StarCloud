@@ -7,6 +7,8 @@ import {
   LINE_HEIGHTS,
   MARGINS,
   type PageMode,
+  type SwipeLayout,
+  type VerticalStyle,
   type SwipeDirection,
 } from '@starcloud/shared';
 import { getToken } from '../api/client';
@@ -25,6 +27,9 @@ const FONT_KEY = 'starcloud.fontStep';
 const LINE_KEY = 'starcloud.lineHeight';
 const MARGIN_KEY = 'starcloud.margin';
 const MODE_KEY = 'starcloud.pageMode';
+const LAYOUT_KEY = 'starcloud.swipeLayout';
+const VSTYLE_KEY = 'starcloud.verticalStyle';
+const DIR_KEY = 'starcloud.swipeDirection';
 const SPREAD_KEY = 'starcloud.spreadTwoUp';
 
 function readIdx(key: string, len: number, fallback: number): number {
@@ -33,10 +38,21 @@ function readIdx(key: string, len: number, fallback: number): number {
 }
 
 function readPageMode(): PageMode {
-  const saved = localStorage.getItem(MODE_KEY);
-  return saved === 'scroll-vertical' || saved === 'scroll-horizontal'
-    ? saved
-    : 'tap';
+  return localStorage.getItem(MODE_KEY) === 'swipe' ? 'swipe' : 'tap';
+}
+
+function readSwipeLayout(): SwipeLayout {
+  return localStorage.getItem(LAYOUT_KEY) === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+function readVerticalStyle(): VerticalStyle {
+  return localStorage.getItem(VSTYLE_KEY) === 'paged' ? 'paged' : 'continuous';
+}
+
+function readDirection(): SwipeDirection {
+  return localStorage.getItem(DIR_KEY) === 'right-next'
+    ? 'right-next'
+    : 'left-next';
 }
 
 /** 单列/双列：桌面默认双列，手机强制单列 */
@@ -47,20 +63,17 @@ function readSpreadTwoUp(): boolean {
 
 const MARGIN_LABELS = ['窄', '中', '宽', '很宽'];
 
-function modeLabel(m: PageMode): string {
-  return m === 'tap'
-    ? '点击翻页'
-    : m === 'scroll-vertical'
-      ? '上下滚动'
-      : '左右滚动';
-}
-
 /**
  * EPUB 渲染器：epubjs 封装。
  *
- * - 排版与翻页方式的档位/类型全部来自 @starcloud/shared
- * - 翻页方式切换通过整体重建渲染器实现（epubjs 动态切 flow 不可靠），
- *   重建前后以章节序号衔接阅读位置
+ * 翻页方式二选一：
+ * - tap:   点击翻页 —— 屏幕 按 倒 Y 三区判定（shared.tapZoneAction），
+ *          方向偏好决定左右分区含义；引擎内置的点击翻页在捕获阶段被拦截。
+ * - swipe: 滑动翻页 —— 配合 swipeLayout 分左右滑动与上下滑动，
+ *          上下滑动再分无缝连续渲染与单页滑动。
+ *
+ * 结构性设置变化通过 rebuildTick 整体重建渲染器，以章节序号衔接位置；
+ * 字号/行距等非结构性变化直接热应用。
  */
 export default function EpubViewer({
   bookId,
@@ -78,11 +91,7 @@ export default function EpubViewer({
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
   const [panelOpen, setPanelOpen] = useState(false);
 
-  /** 是否为触屏设备：左右滚动是触屏专属交互，桌面置灰 */
-  const isTouch =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(pointer: coarse)').matches;
-
+  /* ---- 排版偏好状态 ---- */
   const [stepIndex, setStepIndex] = useState(() =>
     readIdx(FONT_KEY, FONT_STEPS.length, FONT_STEPS.indexOf(100)),
   );
@@ -92,30 +101,28 @@ export default function EpubViewer({
   const [marginIdx, setMarginIdx] = useState(() =>
     readIdx(MARGIN_KEY, MARGINS.length, 1),
   );
-  const [pageMode, setPageMode] = useState<PageMode>(readPageMode);
-  const [swipeDir, setSwipeDir] = useState<SwipeDirection>(
-    localStorage.getItem(DIR_KEY_PLACEHOLDER) === 'right-next'
-      ? 'right-next'
-      : 'left-next',
-  );
-  const [twoUp, setTwoUp] = useState(() => readSpreadTwoUp());
 
-  /** 重建计数：翻页方式等结构性变化时 +1，触发渲染器整体重建 */
+  /* ---- 翻页偏好状态 ---- */
+  const [pageMode, setPageMode] = useState<PageMode>(readPageMode);
+  const [swipeLayout, setSwipeLayout] = useState<SwipeLayout>(readSwipeLayout);
+  const [verticalStyle, setVerticalStyle] = useState<VerticalStyle>(
+    readVerticalStyle,
+  );
+  const [swipeDir, setSwipeDir] = useState<SwipeDirection>(readDirection);
+  const [twoUp, setTwoUp] = useState(readSpreadTwoUp);
+
+  /** 结构性变化时 +1：触发渲染器整体重建 */
   const [rebuildTick, setRebuildTick] = useState(0);
 
-  // 各类 ref：让一次性初始化的 effect 始终拿到最新值
+  /* ---- refs：一次性初始化的 effect 始终拿到最新值 ---- */
   const fontSizeRef = useRef(FONT_STEPS[stepIndex] ?? 100);
   const lineHeightRef = useRef(LINE_HEIGHTS[lineHeightIdx]);
-  const marginRef = useRef(MARGINS[marginIdx]);
   const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
   const lastNavAtRef = useRef(0);
-  const swipeDirRef = useRef<SwipeDirection>(
-    localStorage.getItem(DIR_KEY_PLACEHOLDER) === 'right-next'
-      ? 'right-next'
-      : 'left-next',
-  );
+  const swipeDirRef = useRef<SwipeDirection>(readDirection());
   const pageModeRef = useRef<PageMode>(readPageMode());
   const twoUpRef = useRef(twoUp);
+  const swipeLayoutRef = useRef<SwipeLayout>(readSwipeLayout());
   const lastSpineIdxRef = useRef<number | null>(null);
 
   const goPrev = useCallback(() => renditionRef.current?.prev(), []);
@@ -127,6 +134,8 @@ export default function EpubViewer({
     lastNavAtRef.current = now;
     dir === 'prev' ? goPrev() : goNext();
   }
+  const navigateCooldownRef = useRef(navigateWithCooldown);
+  navigateCooldownRef.current = navigateWithCooldown;
 
   const applyFontSize = useCallback((size: number) => {
     const rendition = renditionRef.current;
@@ -160,67 +169,68 @@ export default function EpubViewer({
     }
   }, []);
 
+  /**
+   * 点击翻页模式：向章节 iframe 文档注入捕获阶段的点击监听。
+   * capture 先于引擎的 bubble 监听执行，stopImmediatePropagation
+   * 掐掉引擎自带点击翻页，保证倒 Y 分区是唯一判定来源。
+   */
+  const applyTapZones = useCallback(() => {
+    if (pageModeRef.current !== 'tap') return;
+    try {
+      for (const c of renditionRef.current?.getContents() ?? []) {
+        const doc: Document | undefined = c.document ?? c.contentDocument;
+        if (!doc || (doc as any).__scTapZone) continue;
+        (doc as any).__scTapZone = true;
+        doc.addEventListener(
+          'click',
+          (e: MouseEvent) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            const dir = tapZoneAction(
+              e.clientX ?? 0,
+              e.clientY ?? 0,
+              window.innerWidth,
+              window.innerHeight,
+              swipeDirRef.current,
+            );
+            navigateCooldownRef.current(dir);
+          },
+          true,
+        );
+      }
+    } catch {
+      // 文档未就绪时忽略
+    }
+  }, []);
+  const applyTapZonesRef = useRef(applyTapZones);
+  applyTapZonesRef.current = applyTapZones;
+
   const keyHandler = useCallback(
     (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        goPrev();
-      } else if (e.key === 'ArrowRight') {
+      // 下箭头恒为下一页，上箭头恒为上一页
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
         goNext();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        goPrev();
+        return;
+      }
+      // 左右方向键跟随方向偏好
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        const isRightKey = e.key === 'ArrowRight';
+        const leftMeansNext = swipeDirRef.current === 'left-next';
+        const isNext = isRightKey ? !leftMeansNext : leftMeansNext;
+        navigateCooldownRef.current(isNext ? 'next' : 'prev');
       }
     },
     [goPrev, goNext],
   );
   keyHandlerRef.current = keyHandler;
-
-  /** 向章节 iframe 注入触摸滑动手势（tap / 左右滚动模式） */
-  const applyGestures = useCallback(() => {
-    if (pageModeRef.current === 'scroll-vertical') return;
-    try {
-      for (const c of renditionRef.current?.getContents() ?? []) {
-        const doc: Document | undefined = c.document ?? c.contentDocument;
-        if (!doc || (doc as any).__scGestures) continue;
-        (doc as any).__scGestures = true;
-        let tsX: number | null = null;
-        let tsY: number | null = null;
-        doc.addEventListener(
-          'touchstart',
-          (e: TouchEvent) => {
-            if (e.touches.length === 1) {
-              tsX = e.touches[0].clientX;
-              tsY = e.touches[0].clientY;
-            }
-          },
-          { passive: true },
-        );
-        doc.addEventListener(
-          'touchend',
-          (e: TouchEvent) => {
-            if (tsX === null || tsY === null) return;
-            const dx = e.changedTouches[0].clientX - tsX;
-            const dy = e.changedTouches[0].clientY - tsY;
-            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-              const isNext = dx < 0 === (swipeDirRef.current === 'left-next');
-              navigateWithCooldown(isNext ? 'next' : 'prev');
-            }
-            tsX = null;
-          },
-          { passive: true },
-        );
-      }
-    } catch {
-      // 文档未就绪时忽略，翻页后重放
-    }
-  }, [navigateWithCooldown]);
-  const applyGesturesRef = useRef(applyGestures);
-  applyGesturesRef.current = applyGestures;
-
-  // swipeDir 状态变化时同步 ref（供注入的手势读取最新方向）
-  useEffect(() => {
-    swipeDirRef.current = swipeDir;
-  }, [swipeDir]);
 
   /* ---- 渲染器初始化（bookId / rebuildTick 变化才重建） ---- */
   useEffect(() => {
@@ -239,14 +249,15 @@ export default function EpubViewer({
         const ebook = ePub(buffer);
         bookRef.current = ebook;
 
-        const flow =
-          pageModeRef.current === 'scroll-vertical' ? 'scrolled' : 'paginated';
+        const mode = pageModeRef.current;
         localRendition = ebook.renderTo(containerRef.current!, {
           width: '100%',
           height: '100%',
-          flow,
-          // 上下滚动模式：连续渲染跨章内容，滚到底自动接下一章
-          manager: pageModeRef.current === 'scroll-vertical' ? 'continuous' : 'default',
+          flow: mode === 'swipe' && swipeLayoutRef.current === 'vertical' ? 'scrolled' : 'paginated',
+          manager:
+            mode === 'swipe' && swipeLayoutRef.current === 'vertical'
+              ? 'continuous'
+              : 'default',
           spread: twoUpRef.current ? 'always' : 'none',
         });
         renditionRef.current = localRendition;
@@ -263,56 +274,26 @@ export default function EpubViewer({
           },
         });
         localRendition.themes.select('paper');
-        localRendition.themes.fontSize(`${fontSizeRef.current}%`);
+        applyFontSize(fontSizeRef.current);
 
         let totalChapters = 0;
 
-        localRendition.on('keyup', (e: KeyboardEvent) =>
-          keyHandlerRef.current(e),
-        );
-
-        localRendition.on('relocated', (location: any) => {
+        function onRelocated(location: any) {
           const idx = location?.start?.index ?? 0;
           lastSpineIdxRef.current = idx;
           setChapter({ current: idx + 1, total: totalChapters });
           onProgress(idx + 1, totalChapters);
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
-          applyGesturesRef.current();
-        });
+          applyTapZonesRef.current();
+        }
 
         // iframe 内按键代理
         localRendition.on('keyup', (e: KeyboardEvent) =>
           keyHandlerRef.current(e),
         );
 
-        // 点击翻页模式：倒 Y 分区（坐标由引擎从 iframe 转发），
-        // 三角区恒为下一页；左右分区含义随方向偏好镜像
-        localRendition.on('click', (e: any) => {
-          if (pageModeRef.current !== 'tap') return;
-          const w = window.innerWidth;
-          const h = window.innerHeight;
-          const dir = tapZoneAction(
-            e.clientX ?? 0,
-            e.clientY ?? 0,
-            w,
-            h,
-            swipeDirRef.current,
-          );
-          navigateWithCooldown(dir);
-        });
-
-        // 触摸滑动翻页（tap / 左右滚动模式）：手势必须注入到 iframe 文档内，
-        // 手指在书页上的触摸不会冒泡到外层容器；新章节渲染后重放
-        localRendition.on('relocated', (location: any) => {
-          applyGesturesRef.current();
-          const idx = location?.start?.index ?? 0;
-          lastSpineIdxRef.current = idx;
-          setChapter({ current: idx + 1, total: totalChapters });
-          onProgress(idx + 1, totalChapters);
-          applyFontSize(fontSizeRef.current);
-          applyLineHeight();
-        });
+        localRendition.on('relocated', onRelocated);
 
         await ebook.ready;
         if (cancelled) return;
@@ -365,22 +346,22 @@ export default function EpubViewer({
     localStorage.setItem(LINE_KEY, String(lineHeightIdx));
   }, [lineHeightIdx, applyLineHeight]);
 
+  const readyRef = useRef(false);
   useEffect(() => {
-    marginRef.current = MARGINS[marginIdx];
+    readyRef.current = ready;
+  }, [ready]);
+
+  useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const px = MARGINS[marginIdx];
     el.style.paddingLeft = `${px}px`;
     el.style.paddingRight = `${px}px`;
-    if (readyRefFn()) renditionRef.current?.resize?.();
+    if (readyRef.current) renditionRef.current?.resize?.();
     localStorage.setItem(MARGIN_KEY, String(marginIdx));
+  }, [marginIdx]);
 
-    function readyRefFn() {
-      return ready;
-    }
-  }, [marginIdx, ready]);
-
-  /** 切换单列/双列：轻量操作，直接改 spread 并回到原位 */
+  /** 切换单列/双列排版 */
   function toggleSpread() {
     const rendition = renditionRef.current;
     if (!rendition || !ready) return;
@@ -409,21 +390,31 @@ export default function EpubViewer({
     setRebuildTick((t) => t + 1);
   }
 
-  function changeDirection(dir: SwipeDirection) {
-    setSwipeDir(dir);
-    swipeDirRef.current = dir;
-    localStorage.setItem(DIR_KEY_PLACEHOLDER, dir);
+  function changeSwipeLayout(layout: SwipeLayout) {
+    if (layout === swipeLayout || !ready) return;
+    setSwipeLayout(layout);
+    localStorage.setItem(LAYOUT_KEY, layout);
+    setRebuildTick((t) => t + 1);
   }
 
-  // 触摸滑动翻页（tap / 左右滚动模式下生效）
+  function changeDirection(dir: SwipeDirection) {
+    setSwipeDir(dir);
+    localStorage.setItem(DIR_KEY, dir);
+  }
+
+  // 触摸滑动（仅滑动翻页的左右模式；上下模式由浏览器/引擎自然处理）
   const touchStartX = useRef<number | null>(null);
   function onTouchStart(e: React.TouchEvent) {
-    touchStartX.current = e.touches[0].clientX;
+    touchStartX.current =
+      pageMode === 'swipe' && swipeLayout === 'horizontal'
+        ? e.touches[0].clientX
+        : null;
   }
   function onTouchEnd(e: React.TouchEvent) {
     if (
       touchStartX.current === null ||
-      pageMode === 'scroll-vertical' ||
+      pageMode !== 'swipe' ||
+      swipeLayout !== 'horizontal' ||
       !ready
     ) {
       touchStartX.current = null;
@@ -540,33 +531,49 @@ export default function EpubViewer({
             <div className="setting-row">
               <div className="setting-label">
                 <span>翻页方式</span>
-                <span>{modeLabel(pageMode)}</span>
+                <span>{pageMode === 'tap' ? '点击翻页' : `滑动·${swipeLayout === 'vertical' ? '上下' : '左右'}${verticalStyle === 'paged' ? '·单页' : ''}`}</span>
               </div>
               <div className="segment-group">
-                {(
-                  [
-                    ['tap', '点击翻页'],
-                    ['scroll-vertical', '上下滚动'],
-                    ['scroll-horizontal', '左右滚动'],
-                  ] as [PageMode, string][]
-                ).map(([m, label]) => {
-                  const disabled = m === 'scroll-horizontal' && !isTouch;
-                  return (
-                    <button
-                      key={m}
-                      className={`segment-btn${pageMode === m ? ' active' : ''}`}
-                      disabled={disabled}
-                      title={disabled ? '左右滚动需要触屏设备' : undefined}
-                      onClick={() => changePageMode(m)}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+                <button
+                  className={`segment-btn${pageMode === 'tap' ? ' active' : ''}`}
+                  onClick={() => changePageMode('tap')}
+                >
+                  点击翻页
+                </button>
+                <button
+                  className={`segment-btn${pageMode === 'swipe' ? ' active' : ''}`}
+                  onClick={() => changePageMode('swipe')}
+                >
+                  滑动翻页
+                </button>
               </div>
             </div>
 
-            {(pageMode === 'tap' || pageMode === 'scroll-horizontal') && (
+            {pageMode === 'swipe' && (
+              <div className="setting-row">
+                <div className="setting-label">
+                  <span>滑动方向</span>
+                  <span>{swipeLayout === 'vertical' ? '上下滑动' : '左右滑动'}</span>
+                </div>
+                <div className="segment-group">
+                  <button
+                    className={`segment-btn${swipeLayout === 'horizontal' ? ' active' : ''}`}
+                    onClick={() => changeSwipeLayout('horizontal')}
+                  >
+                    左右滑动
+                  </button>
+                  <button
+                    className={`segment-btn${swipeLayout === 'vertical' ? ' active' : ''}`}
+                    onClick={() => changeSwipeLayout('vertical')}
+                  >
+                    上下滑动
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(pageMode === 'tap' ||
+              (pageMode === 'swipe' && swipeLayout === 'horizontal')) && (
               <div className="setting-row">
                 <div className="setting-label">
                   <span>方向</span>
@@ -596,7 +603,3 @@ export default function EpubViewer({
     </div>
   );
 }
-
-// DIR_KEY 占位：实际存储键在下方常量区定义前被引用会报错，
-// 故此处统一使用字符串字面量，保持与 storage 其他模块一致的命名风格。
-const DIR_KEY_PLACEHOLDER = 'starcloud.swipeDirection';

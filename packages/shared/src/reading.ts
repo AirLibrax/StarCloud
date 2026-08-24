@@ -18,22 +18,37 @@ export const MARGINS = [10, 24, 48, 80];
 /* ---------------- 翻页方式 ---------------- */
 
 /**
- * 三种翻页方式（二无反顾，三选一）：
- * - tap：              点击翻页（倒 Y 分区，见 tapZoneAction）
- * - scroll-vertical:   上下滚动（无缝纵向）
- * - scroll-horizontal: 左右滚动（无缝横向）
+ * 两大翻页方式：
+ * - tap:   点击翻页（屏幕分区：倒 Y 分区 + 底部三角区）
+ * - swipe: 滑动翻页（配合 swipeLayout 细分左右/上下）
  */
-export type PageMode = 'tap' | 'scroll-vertical' | 'scroll-horizontal';
+export type PageMode = 'tap' | 'swipe';
 
 /**
- * 方向偏好：「向左下一页」= 下一页位于当前页左侧
- * （日式漫画方向：点左侧 / 手指从左向右滑 = 下一页）；
- * 「向右下一页」为常规中文书方向。
+ * 滑动翻页的轴向（仅 pageMode === 'swipe' 时有意义）：
+ * - horizontal: 左右滑动
+ * - vertical:   上下滑动
+ */
+export type SwipeLayout = 'horizontal' | 'vertical';
+
+/**
+ * 上下滑动的翻页样式（仅 swipeLayout === 'vertical' 时有意义）：
+ * - continuous: 无缝滑动，整章内容连成一条
+ * - paged:      单页滑动，手指上推一页一页切
+ */
+export type VerticalStyle = 'continuous' | 'paged';
+
+/**
+ * 方向偏好（点击翻页 / 左右滑动时生效）：
+ * - left-next:  向左下一页（日式漫画方向）
+ * - right-next: 向右下一页（常规中文书方向）
  */
 export type SwipeDirection = 'left-next' | 'right-next';
 
 export interface ReadingInteractionPrefs {
   pageMode: PageMode;
+  swipeLayout: SwipeLayout;
+  verticalStyle: VerticalStyle;
   swipeDirection: SwipeDirection;
 }
 
@@ -43,16 +58,14 @@ export interface ReadingInteractionPrefs {
 const TRIANGLE_HEIGHT_PX = 76;
 
 /**
- * 判定一次点击落在哪个翻页区。
+ * 判定一次点击落在哪个翻页区（点击翻页模式专用）。
  *
  * 屏幕划分为倒 Y 字型三区：
- * - 底部三角区（左下角、中线距底 2cm 点、右下角三点围成）：恒为「下一页」，
- *   不随方向偏好镜像；
- * - 其余部分按中垂线分界，左右含义由方向偏好决定：
+ * - 底部三角区（左下角、中线距底 2cm 点、右下角三点围成）：恒为「下一页」；
+ * - 其余部分按中垂线分界，含义由方向偏好决定：
  *   「向左下一页」→ 点左半为下一页；「向右下一页」→ 点右半为下一页。
  *
  * @param direction 方向偏好
- * @returns 'prev' | 'next'
  */
 export function tapZoneAction(
   x: number,
@@ -71,7 +84,6 @@ export function tapZoneAction(
     if (y >= leftEdgeY && y >= rightEdgeY) return 'next';
   }
 
-  // 其余区域按中垂线分界 + 方向偏好镜像
   const onLeft = x < width / 2;
   if (direction === 'left-next') return onLeft ? 'next' : 'prev';
   return onLeft ? 'prev' : 'next';
