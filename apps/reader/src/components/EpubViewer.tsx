@@ -169,42 +169,6 @@ export default function EpubViewer({
     }
   }, []);
 
-  /**
-   * 点击翻页模式：向章节 iframe 文档注入捕获阶段的点击监听。
-   * capture 先于引擎的 bubble 监听执行，stopImmediatePropagation
-   * 掐掉引擎自带点击翻页，保证倒 Y 分区是唯一判定来源。
-   */
-  const applyTapZones = useCallback(() => {
-    if (pageModeRef.current !== 'tap') return;
-    try {
-      for (const c of renditionRef.current?.getContents() ?? []) {
-        const doc: Document | undefined = c.document ?? c.contentDocument;
-        if (!doc || (doc as any).__scTapZone) continue;
-        (doc as any).__scTapZone = true;
-        doc.addEventListener(
-          'click',
-          (e: MouseEvent) => {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            const dir = tapZoneAction(
-              e.clientX ?? 0,
-              e.clientY ?? 0,
-              window.innerWidth,
-              window.innerHeight,
-              swipeDirRef.current,
-            );
-            navigateCooldownRef.current(dir);
-          },
-          true,
-        );
-      }
-    } catch {
-      // 文档未就绪时忽略
-    }
-  }, []);
-  const applyTapZonesRef = useRef(applyTapZones);
-  applyTapZonesRef.current = applyTapZones;
-
   const keyHandler = useCallback(
     (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -246,10 +210,17 @@ export default function EpubViewer({
         const buffer = await res.arrayBuffer();
         if (cancelled) return;
 
+        const mode = pageModeRef.current;
+        // 点击翻页模式：书页对指针事件透明（见 CSS .no-events），
+        // 所有点击落在外层容器由统一的左右分区判定处理
+        if (mode === 'tap') {
+          containerRef.current!.classList.add('no-events');
+        } else {
+          containerRef.current!.classList.remove('no-events');
+        }
+
         const ebook = ePub(buffer);
         bookRef.current = ebook;
-
-        const mode = pageModeRef.current;
         localRendition = ebook.renderTo(containerRef.current!, {
           width: '100%',
           height: '100%',
@@ -285,7 +256,6 @@ export default function EpubViewer({
           onProgress(idx + 1, totalChapters);
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
-          applyTapZonesRef.current();
         }
 
         // iframe 内按键代理
@@ -430,7 +400,19 @@ export default function EpubViewer({
   }
 
   return (
-    <div className="epub-viewer" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div
+      className="epub-viewer"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onClick={(e) => {
+        // 点击翻页模式：书页 iframe 已对指针事件透明，
+        // 所有点击落在外层，按左右分区判定
+        if (pageMode !== 'tap' || !ready) return;
+        if ((e.target as HTMLElement).closest('.epub-toolbar')) return;
+        const dir = tapZoneAction(e.clientX, window.innerWidth, swipeDir);
+        navigateWithCooldown(dir);
+      }}
+    >
       <div className="epub-toolbar">
         <div className="toolbar-left">
           <Link to="/" className="btn">← 书架</Link>

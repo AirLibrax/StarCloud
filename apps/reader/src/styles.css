@@ -341,6 +341,11 @@ input:focus {
   /* 与书页主题背景同色，边距区域和内容浑然一体 */
   background: #fbf7ee;
 }
+/* 点击翻页模式：书页对指针透明，点击统一落在外层容器判定 */
+.epub-container.no-events,
+.epub-container.no-events iframe {
+  pointer-events: none !important;
+}
 
 /* ---- 排版设置面板 ---- */
 .panel-mask {

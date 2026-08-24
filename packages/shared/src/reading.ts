@@ -19,7 +19,7 @@ export const MARGINS = [10, 24, 48, 80];
 
 /**
  * 两大翻页方式：
- * - tap:   点击翻页（屏幕分区：倒 Y 分区 + 底部三角区）
+ * - tap:   点击翻页（屏幕左右分区，含义随方向偏好）
  * - swipe: 滑动翻页（配合 swipeLayout 细分左右/上下）
  */
 export type PageMode = 'tap' | 'swipe';
@@ -52,38 +52,20 @@ export interface ReadingInteractionPrefs {
   swipeDirection: SwipeDirection;
 }
 
-/* ---------------- 倒 Y 点击分区 ---------------- */
-
-/** 底部三角区高度：屏幕中线处距底部约 2cm（按 96dpi 约 76px） */
-const TRIANGLE_HEIGHT_PX = 76;
+/* ---------------- 点击分区 ---------------- */
 
 /**
  * 判定一次点击落在哪个翻页区（点击翻页模式专用）。
  *
- * 屏幕划分为倒 Y 字型三区：
- * - 底部三角区（左下角、中线距底 2cm 点、右下角三点围成）：恒为「下一页」；
- * - 其余部分按中垂线分界，含义由方向偏好决定：
- *   「向左下一页」→ 点左半为下一页；「向右下一页」→ 点右半为下一页。
- *
- * @param direction 方向偏好
+ * 屏幕按中垂线分为两半，含义随方向偏好决定：
+ * - 「向左下一页」→ 点左半为下一页，右半为上一页；
+ * - 「向右下一页」→ 点右半为下一页，左半为上一页。
  */
 export function tapZoneAction(
   x: number,
-  y: number,
   width: number,
-  height: number,
   direction: SwipeDirection,
 ): 'prev' | 'next' {
-  const mx = width / 2;
-  const my = height - TRIANGLE_HEIGHT_PX;
-
-  // 底部三角区：位于中线高度以下，且在两条斜边之内 —— 恒为下一页
-  if (y >= my) {
-    const leftEdgeY = height + ((my - height) * x) / mx;
-    const rightEdgeY = height + ((my - height) * (width - x)) / mx;
-    if (y >= leftEdgeY && y >= rightEdgeY) return 'next';
-  }
-
   const onLeft = x < width / 2;
   if (direction === 'left-next') return onLeft ? 'next' : 'prev';
   return onLeft ? 'prev' : 'next';

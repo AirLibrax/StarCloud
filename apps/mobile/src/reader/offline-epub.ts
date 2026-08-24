@@ -35,6 +35,8 @@ export interface OfflineReaderOptions {
   lineHeight: number;
   /** 翻页方式（shared.PageMode） */
   pageMode: PageMode;
+  /** 方向偏好 */
+  direction: 'left-next' | 'right-next';
 }
 
 /**
@@ -68,7 +70,7 @@ window.__initialPct = ${opts.initialPercentage};
 window.__fontPct = ${opts.fontSizePct};
 window.__lineHeight = ${opts.lineHeight};
 window.__pageMode = "${opts.pageMode}";
-window.__swipeLeftNext = ${opts.pageMode === 'tap' || opts.pageMode === 'scroll-horizontal' ? 'false' : 'true'};
+window.__dirLeftNext = ${opts.direction === 'left-next'};
 function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__chunks = [];
 window.__pushChunk = function(c) { window.__chunks.push(c); };
@@ -107,7 +109,7 @@ window.__openBook = function() {
       var dy = e.changedTouches[0].clientY - tsY;
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
         // 「向左下一页」= 手指从左向右滑为下一页；「向右下一页」反之
-        var isNext = (dx > 0) !== window.__swipeLeftNext;
+        var isNext = (dx > 0) === window.__dirLeftNext;
         if (isNext) rendition.next(); else rendition.prev();
       }
       tsX = null;

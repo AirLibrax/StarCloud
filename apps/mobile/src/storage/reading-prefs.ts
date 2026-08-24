@@ -8,21 +8,22 @@ import {
   LINE_HEIGHTS,
   MARGINS,
   type PageMode,
+  type SwipeLayout,
+  type VerticalStyle,
   type SwipeDirection,
 } from '@starcloud/shared';
 
 // 转出口供 App 内使用
 export { FONT_STEPS, LINE_HEIGHTS, MARGINS };
-export type { PageMode, SwipeDirection };
-
-export type PageAxis = 'horizontal' | 'vertical';
+export type { PageMode, SwipeLayout, VerticalStyle, SwipeDirection };
 
 export interface ReadingPrefs {
   fontStep: number; // FONT_STEPS 索引
   lineHeightIdx: number; // LINE_HEIGHTS 索引
   marginIdx: number; // MARGINS 索引
   pageMode: PageMode;
-  pageAxis: PageAxis; // 仅 TXT 分页式有意义
+  swipeLayout: SwipeLayout; // 滑动翻页轴向（仅 pageMode==='swipe'）
+  verticalStyle: VerticalStyle; // 上下滑动的样式（仅 vertical 轴向）
   swipeDirection: SwipeDirection;
 }
 
@@ -31,7 +32,8 @@ const DEFAULTS: ReadingPrefs = {
   lineHeightIdx: 1,
   marginIdx: 1,
   pageMode: 'tap',
-  pageAxis: 'horizontal',
+  swipeLayout: 'horizontal',
+  verticalStyle: 'continuous',
   swipeDirection: 'left-next',
 };
 

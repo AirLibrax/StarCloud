@@ -144,42 +144,58 @@ export default function ReaderScreen() {
                   onPress={() => patchPrefs({ pageMode: 'tap' })}
                 />
                 <SegmentBtn
-                  label="上下滚动"
-                  active={prefs.pageMode === 'scroll-vertical'}
-                  onPress={() => patchPrefs({ pageMode: 'scroll-vertical' })}
-                />
-                <SegmentBtn
-                  label="左右滚动"
-                  active={prefs.pageMode === 'scroll-horizontal'}
-                  onPress={() => patchPrefs({ pageMode: 'scroll-horizontal' })}
+                  label="滑动翻页"
+                  active={prefs.pageMode === 'swipe'}
+                  onPress={() => patchPrefs({ pageMode: 'swipe' })}
                 />
               </View>
             </View>
 
-            {prefs.pageMode === 'tap' && fileType !== 'epub' && (
+            {prefs.pageMode === 'swipe' && (
               <View>
                 <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
-                  翻页轴向
+                  滑动方向
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <SegmentBtn
-                    label="左右翻页"
-                    active={prefs.pageAxis === 'horizontal'}
-                    onPress={() => patchPrefs({ pageAxis: 'horizontal' })}
+                    label="左右滑动"
+                    active={prefs.swipeLayout === 'horizontal'}
+                    onPress={() => patchPrefs({ swipeLayout: 'horizontal' })}
                   />
                   <SegmentBtn
-                    label="上下翻页"
-                    active={prefs.pageAxis === 'vertical'}
-                    onPress={() => patchPrefs({ pageAxis: 'vertical' })}
+                    label="上下滑动"
+                    active={prefs.swipeLayout === 'vertical'}
+                    onPress={() => patchPrefs({ swipeLayout: 'vertical' })}
                   />
                 </View>
               </View>
             )}
 
-            {(prefs.pageMode === 'tap' || prefs.pageMode === 'scroll-horizontal') && (
+            {prefs.pageMode === 'swipe' && prefs.swipeLayout === 'vertical' && (
               <View>
                 <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
-                  滑动方向（左右翻页时）
+                  滚动样式
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SegmentBtn
+                    label="无缝滚动"
+                    active={prefs.verticalStyle === 'continuous'}
+                    onPress={() => patchPrefs({ verticalStyle: 'continuous' })}
+                  />
+                  <SegmentBtn
+                    label="单页翻动"
+                    active={prefs.verticalStyle === 'paged'}
+                    onPress={() => patchPrefs({ verticalStyle: 'paged' })}
+                  />
+                </View>
+              </View>
+            )}
+
+            {(prefs.pageMode === 'tap' ||
+              (prefs.pageMode === 'swipe' && prefs.swipeLayout === 'horizontal')) && (
+              <View>
+                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                  方向
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <SegmentBtn
@@ -449,6 +465,7 @@ function EpubPane({
           fontSizePct: FONT_STEPS[prefs.fontStep],
           lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
           pageMode: prefs.pageMode,
+          direction: prefs.swipeDirection,
         });
         if (!cancelled) setHtml(h);
       } catch (err) {
@@ -463,7 +480,7 @@ function EpubPane({
   }, [bookKey, fileUri]);
 
   // 排版/方向变化：重建阅读页或更新引擎变量
-  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.pageMode}`;
+  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.pageMode}-${prefs.swipeDirection}`;
   const firstStyle = useRef(true);
   useEffect(() => {
     if (firstStyle.current || !html) {
@@ -476,6 +493,7 @@ function EpubPane({
       fontSizePct: FONT_STEPS[prefs.fontStep],
       lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
       pageMode: prefs.pageMode,
+      direction: prefs.swipeDirection,
     }).then((h) => {
       if (!cancelledRef.current) setHtml(h);
     });
@@ -598,12 +616,9 @@ function TxtPane({
   const totalPages =
     content === null ? 0 : Math.max(1, Math.ceil(content.length / CHARS_PER_PAGE));
 
-  /** 分页/横向滚动：按字符块切页；方向反转通过页序映射实现 */
+  /** 分页/点击翻页：按字符块切页；方向反转通过页序映射实现 */
   const pages: string[] = [];
-  if (
-    content !== null &&
-    (prefs.pageMode === 'tap' || prefs.pageMode === 'scroll-horizontal')
-  ) {
+  if (content !== null && prefs.pageMode === 'tap') {
     for (let i = 0; i < content.length; i += CHARS_PER_PAGE) {
       pages.push(content.slice(i, i + CHARS_PER_PAGE));
     }
@@ -616,7 +631,8 @@ function TxtPane({
       if (
         node &&
         content !== null &&
-        prefs.pageMode === 'scroll-vertical' &&
+        prefs.pageMode === 'swipe' &&
+        prefs.swipeLayout === 'vertical' &&
         !restored.current &&
         initialPercentage > 0
       ) {
@@ -657,7 +673,7 @@ function TxtPane({
     color: '#2a2622',
   };
 
-  if (prefs.pageMode === 'scroll-vertical') {
+  if (prefs.pageMode === 'swipe' && prefs.swipeLayout === 'vertical') {
     return (
       <ScrollView
         ref={scrollRefCb}
@@ -709,13 +725,11 @@ function TxtPane({
           key={i}
           activeOpacity={1}
           onPress={(e) => {
-            // 点击分区与 Web 端一致：倒 Y 三区（shared.tapZoneAction）
-            const { width: w, height: h } = Dimensions.get('window');
+            // 点击分区与 Web 端一致：左右两半（shared.tapZoneAction）
+            const { width: w } = Dimensions.get('window');
             const dir = tapZoneAction(
               e.nativeEvent.locationX,
-              e.nativeEvent.locationY,
               w,
-              h,
               prefs.swipeDirection,
             );
             const target = dir === 'next' ? i + 1 : i - 1;
