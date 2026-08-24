@@ -31,6 +31,8 @@ const LAYOUT_KEY = 'starcloud.swipeLayout';
 const VSTYLE_KEY = 'starcloud.verticalStyle';
 const DIR_KEY = 'starcloud.swipeDirection';
 const SPREAD_KEY = 'starcloud.spreadTwoUp';
+/** 双列排版生效的最小视口宽度：仅平板横屏/桌面（>900px）允许双列 */
+const SPREAD_MIN_WIDTH = 900;
 
 function readIdx(key: string, len: number, fallback: number): number {
   const saved = parseInt(localStorage.getItem(key) ?? '', 10);
@@ -55,9 +57,8 @@ function readDirection(): SwipeDirection {
     : 'left-next';
 }
 
-/** 单列/双列：桌面默认双列，手机强制单列 */
-function readSpreadTwoUp(): boolean {
-  if (window.matchMedia('(max-width: 768px)').matches) return false;
+/** 单列/双列偏好（是否实际生效还受视口宽度约束，见 SPREAD_MIN_WIDTH） */
+function readSpreadTwoUpPref(): boolean {
   return localStorage.getItem(SPREAD_KEY) !== 'single';
 }
 
@@ -80,7 +81,9 @@ function modeLabel(m: PageMode): string {
  *          书页对指针透明（pointer-events:none），所有点击由外层容器
  *          统一做分区判定，避免与引擎内置行为双重触发。
  * - swipe: 滑动翻页 —— 触屏上左右滑动或上下滑动（引擎原生触摸），
- *          桌面端自动降级为上下无缝滚动（滚轮阅读）并强制单列；
+ *          桌面端自动降级为上下无缝滚动（滚轮阅读）；
+ * 单列/双列：视口 >900px（平板横屏/桌面）且用户开启双列时 spread='always'，
+ * 否则 'none'；视口/容器尺寸变化自动重排防截断，窄屏隐藏切换按钮。
  *          上下滑动为连续渲染（跨章无缝），暂无单页样式。
  *
  * 结构性变化通过 rebuildTick 整体重建渲染器，以章节序号衔接位置；
@@ -119,7 +122,11 @@ export default function EpubViewer({
   const [pageMode, setPageMode] = useState<PageMode>(readPageMode);
   const [swipeLayout, setSwipeLayout] = useState<SwipeLayout>(readSwipeLayout);
   const [swipeDir, setSwipeDir] = useState<SwipeDirection>(readDirection);
-  const [twoUp, setTwoUp] = useState(readSpreadTwoUp);
+  const [twoUpPref, setTwoUpPref] = useState(readSpreadTwoUpPref);
+  /** 视口宽度是否达到双列门槛（>900px：平板横屏/桌面） */
+  const [isWide, setIsWide] = useState(() => window.innerWidth > SPREAD_MIN_WIDTH);
+  /** 实际生效的单列/双列 = 用户偏好 ∩ 视口宽度 */
+  const twoUp = twoUpPref && isWide;
 
   /** 结构性变化时 +1：触发渲染器整体重建 */
   const [rebuildTick, setRebuildTick] = useState(0);
@@ -133,6 +140,10 @@ export default function EpubViewer({
   const swipeLayoutRef = useRef<SwipeLayout>(readSwipeLayout());
   const swipeDirRef = useRef<SwipeDirection>(readDirection());
   const twoUpRef = useRef(twoUp);
+  const twoUpPrefRef = useRef(twoUpPref);
+  // 渲染期同步：一次性初始化的 effect 始终拿到最新值
+  twoUpPrefRef.current = twoUpPref;
+  twoUpRef.current = twoUp;
   const lastSpineIdxRef = useRef<number | null>(null);
 
   const goPrev = useCallback(() => renditionRef.current?.prev(), []);
@@ -344,6 +355,56 @@ export default function EpubViewer({
     localStorage.setItem(MARGIN_KEY, String(marginIdx));
   }, [marginIdx]);
 
+  /* ---- 视口宽度跟踪：双列门槛与容器重排 ---- */
+
+  // 窗口 resize / 横竖屏切换时刷新「视口是否够宽」
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: landscape)');
+    const updateWide = () => setIsWide(window.innerWidth > SPREAD_MIN_WIDTH);
+    updateWide();
+    window.addEventListener('resize', updateWide);
+    mq.addEventListener('change', updateWide);
+    return () => {
+      window.removeEventListener('resize', updateWide);
+      mq.removeEventListener('change', updateWide);
+    };
+  }, []);
+
+  /** 视口跨过双列门槛：切换 spread 并按当前章节重排（防截断） */
+  useEffect(() => {
+    const rendition = renditionRef.current;
+    if (!readyRef.current || !rendition) return;
+    const nextSpread = twoUpPrefRef.current && isWide ? 'always' : 'none';
+    if (rendition.settings?.spread === nextSpread) return;
+    let cfi: string | undefined;
+    try {
+      cfi = rendition.currentLocation()?.start?.cfi;
+    } catch {
+      // 尚无位置信息
+    }
+    rendition.spread(nextSpread);
+    rendition.clear();
+    rendition.display(cfi ?? undefined);
+  }, [isWide]);
+
+  /** 容器尺寸变化 → rendition.resize() 重排（引擎自带 window resize 监听，此处兜底容器级变化） */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (readyRef.current) renditionRef.current?.resize?.();
+      });
+    });
+    ro.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, []);
+
   /**
    * 向章节 iframe 文档注入捕获阶段的按键监听。
    * 焦点在书页内时，按键按下瞬间即触发翻页（不经引擎转发、不等松手）。
@@ -367,14 +428,15 @@ export default function EpubViewer({
   const applyDocHandlersRef = useRef(applyDocHandlers);
   applyDocHandlersRef.current = applyDocHandlers;
 
-  /** 切换单列/双列排版 */
+  /** 切换单列/双列偏好；窄屏（未达双列门槛）只改偏好，不应用 */
   function toggleSpread() {
     const rendition = renditionRef.current;
     if (!rendition || !ready) return;
-    const next = !twoUp;
-    setTwoUp(next);
-    twoUpRef.current = next;
+    const next = !twoUpPref;
+    setTwoUpPref(next);
+    twoUpPrefRef.current = next;
     localStorage.setItem(SPREAD_KEY, next ? 'two-up' : 'single');
+    if (!isWide) return;
 
     let cfi: string | undefined;
     try {
@@ -461,10 +523,12 @@ export default function EpubViewer({
                 : '')}
         </span>
         <div className="toolbar-right">
-          {/* 单列/双列排版切换（窄屏自动隐藏，强制单列） */}
-          <button className="btn spread-btn" onClick={toggleSpread} disabled={!ready}>
-            {twoUp ? '双列' : '单列'}
-          </button>
+          {/* 单列/双列排版切换（视口未达双列门槛时隐藏，强制单列） */}
+          {isWide && (
+            <button className="btn spread-btn" onClick={toggleSpread} disabled={!ready}>
+              {twoUp ? '双列' : '单列'}
+            </button>
+          )}
           <button
             className="btn icon-btn"
             disabled={!ready}

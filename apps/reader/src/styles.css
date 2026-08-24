@@ -312,8 +312,8 @@ input:focus {
   border-color: var(--accent);
   color: #fffdf7;
 }
-/* 手机：单双列按钮隐藏（窄屏强制单列） */
-@media (max-width: 768px) {
+/* 窄屏强制单列：单/双列切换按钮仅在视口 >900px（平板横屏/桌面）时显示 */
+@media (max-width: 900px) {
   .spread-btn {
     display: none;
   }
