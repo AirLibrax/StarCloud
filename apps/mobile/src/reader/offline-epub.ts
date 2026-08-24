@@ -2,10 +2,18 @@
  * 离线 EPUB 阅读页生成。
  * epubjs / jszip（打包资产）内联进骨架页，WebView 加载后由 RN 分块推送
  * 书籍 base64 数据，epubjs 以 base64 编码模式直接解压（不走 XHR，无 data: URI 限制）。
+ *
+ * 翻页语义与 Web 端 EpubViewer 一致（消费 @starcloud/shared）：
+ * - tap / swipe+horizontal：页面对指针透明（.sc-no-pointer，同 Web .no-pointer），
+ *   手势桥接 JS 在宿主 document 上判定原始手势（touchstart/touchend），
+ *   postMessage 回 RN，由 RN 按 shared 模型判定语义并回注 __scNav() 执行翻页；
+ * - swipe+vertical：flow=scrolled + manager=default（与 Web 相同的映射表），
+ *   引擎原生滚动，无桥接。
+ * 键盘通道不需要（纯触屏）。
  */
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
-import type { PageMode } from '@starcloud/shared';
+import type { PageMode, SwipeLayout } from '@starcloud/shared';
 
 const vendorAssets = {
   jszip: require('../../assets/vendor/jszip.min.js.txt'),
@@ -33,16 +41,20 @@ export interface OfflineReaderOptions {
   initialPercentage: number;
   fontSizePct: number;
   lineHeight: number;
+  /** 左右页边距（px），注入 body padding（与 Web 端容器 padding 对应） */
+  marginPx: number;
   /** 翻页方式（shared.PageMode） */
   pageMode: PageMode;
-  /** 方向偏好 */
-  direction: 'left-next' | 'right-next';
+  /** 滑动轴向（shared.SwipeLayout；仅 pageMode==='swipe' 时有意义） */
+  swipeLayout: SwipeLayout;
 }
 
 /**
  * 生成自包含阅读器骨架 HTML 字符串。
  * WebView 以 source={{ html }} 注入；书籍数据由 RN 在收到
  * `{ t: "need-book" }` 消息后分块注入（见 EpubPane）。
+ * 手势桥接只上报原始手势（{t:'tap',x} / {t:'swipe',dx}），
+ * 翻页语义判定统一在 RN 侧。
  */
 export async function buildOfflineEpubHtml(
   bookKey: string,
@@ -55,10 +67,21 @@ export async function buildOfflineEpubHtml(
   const safeJszip = jszip.replace(/<\/script>/gi, '<\\/script>');
   const safeEpub = epub.replace(/<\/script>/gi, '<\\/script>');
 
+  // 与 Web EpubViewer 相同的 flow/manager 映射表：
+  // tap / swipe+horizontal → paginated + default；swipe+vertical → scrolled + default
+  const isVerticalScroll = opts.pageMode === 'swipe' && opts.swipeLayout === 'vertical';
+  // 需要手势桥接的模式（tap / swipe+horizontal）：页面对指针透明，与 Web .no-pointer 同理
+  const needsBridge = !isVerticalScroll;
+
   return `<!doctype html><html><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<style>body{margin:0;background:#fbf7ee}#viewer{width:100vw;height:100vh}</style>
-</head><body><div id="viewer"></div>
+<style>
+html,body{height:100%}
+body{margin:0;background:#fbf7ee;padding-left:${opts.marginPx}px;padding-right:${opts.marginPx}px}
+#viewer{width:100%;height:100%}
+${needsBridge ? '.sc-no-pointer #viewer,.sc-no-pointer #viewer iframe{pointer-events:none !important}' : ''}
+</style>
+</head><body${needsBridge ? ' class="sc-no-pointer"' : ''}><div id="viewer"></div>
 <script>${safeJszip}</script>
 <script>${safeEpub}</script>
 <script>
@@ -70,21 +93,27 @@ window.__initialPct = ${opts.initialPercentage};
 window.__fontPct = ${opts.fontSizePct};
 window.__lineHeight = ${opts.lineHeight};
 window.__pageMode = "${opts.pageMode}";
-window.__dirLeftNext = ${opts.direction === 'left-next'};
+window.__swipeLayout = "${opts.swipeLayout}";
 function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__chunks = [];
 window.__pushChunk = function(c) { window.__chunks.push(c); };
+/* 翻页执行入口：由 RN 手势桥接消息驱动（postMessage → RN 判定 → 回注本函数） */
+window.__scNav = function(d) {
+  if (!window.__rendition) return;
+  if (d === 'next') window.__rendition.next(); else window.__rendition.prev();
+};
 window.__openBook = function() {
   try {
     var b64 = window.__chunks.join('');
     var book = ePub(b64, { encoding: 'base64' });
-    var isScroll = window.__pageMode === 'scroll-vertical';
+    var isScroll = ${isVerticalScroll ? 'true' : 'false'};
     var rendition = book.renderTo('viewer', {
       width: '100%', height: '100%',
       flow: isScroll ? 'scrolled' : 'paginated',
-      manager: isScroll ? 'continuous' : 'default',
+      manager: 'default',
       spread: 'none'
     });
+    window.__rendition = rendition;
     rendition.themes.register('paper', {
       body: {
         background: '#fbf7ee',
@@ -98,27 +127,33 @@ window.__openBook = function() {
     });
     rendition.themes.select('paper');
     rendition.themes.fontSize(window.__fontPct + '%');
-    // 滑动翻页（方向可由 RN 侧动态修改 __swipeLeftNext）
+    // 手势桥接：只上报原始手势，语义由 RN 按 shared 模型判定
+    // （iframes 内事件不冒泡到宿主页；指针透明后触摸落在宿主 document 上）
     var tsX = null, tsY = null;
     document.addEventListener('touchstart', function(e) {
       if (e.touches.length === 1) { tsX = e.touches[0].clientX; tsY = e.touches[0].clientY; }
     }, { passive: true });
     document.addEventListener('touchend', function(e) {
       if (tsX === null) return;
-      var dx = e.changedTouches[0].clientX - tsX;
-      var dy = e.changedTouches[0].clientY - tsY;
+      var cx = e.changedTouches[0].clientX;
+      var cy = e.changedTouches[0].clientY;
+      var dx = cx - tsX;
+      var dy = cy - tsY;
+      tsX = null; tsY = null;
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-        // 「向左下一页」= 手指从左向右滑为下一页；「向右下一页」反之
-        var isNext = (dx > 0) === window.__dirLeftNext;
-        if (isNext) rendition.next(); else rendition.prev();
+        post({ t: 'swipe', dx: dx });
+      } else if (window.__pageMode === 'tap') {
+        post({ t: 'tap', x: cx });
       }
-      tsX = null;
     }, { passive: true });
+    // 章节变化才报进度（防抖在 RN 侧）
+    var lastIdx = -1;
     rendition.on('relocated', function(loc) {
       var total = book.spine.items.length;
       var idx = loc.start ? loc.start.index : 0;
-      var pct = total > 0 ? Math.round(((idx + 1) / total) * 1000) / 10 : 0;
-      post({ t: 'progress', page: idx + 1, total: total, pct: pct });
+      if (idx === lastIdx) return;
+      lastIdx = idx;
+      post({ t: 'progress', page: idx + 1, total: total });
     });
     book.ready.then(function() {
       var t = book.spine.items.length;

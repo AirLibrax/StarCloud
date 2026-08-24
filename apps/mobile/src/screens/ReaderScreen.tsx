@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, Pressable } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { WebView } from 'react-native-webview';
 import { PanGestureHandler, State, type PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
@@ -406,8 +406,9 @@ function EpubPane({
           initialPercentage,
           fontSizePct: FONT_STEPS[prefs.fontStep],
           lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
+          marginPx: MARGINS[prefs.marginIdx],
           pageMode: prefs.pageMode,
-          direction: prefs.swipeDirection,
+          swipeLayout: prefs.swipeLayout,
         });
         if (!cancelled) setHtml(h);
       } catch (err) {
@@ -421,8 +422,8 @@ function EpubPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookKey, fileUri]);
 
-  // 排版/方向变化：重建阅读页或更新引擎变量
-  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.pageMode}-${prefs.swipeDirection}`;
+  // 排版/翻页模式变化：重建阅读页（渲染参数随 HTML 一起注入）
+  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.marginIdx}-${prefs.pageMode}-${prefs.swipeLayout}`;
   const firstStyle = useRef(true);
   useEffect(() => {
     if (firstStyle.current || !html) {
@@ -434,8 +435,9 @@ function EpubPane({
       initialPercentage,
       fontSizePct: FONT_STEPS[prefs.fontStep],
       lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
+      marginPx: MARGINS[prefs.marginIdx],
       pageMode: prefs.pageMode,
-      direction: prefs.swipeDirection,
+      swipeLayout: prefs.swipeLayout,
     }).then((h) => {
       if (!cancelledRef.current) setHtml(h);
     });
@@ -465,6 +467,13 @@ function EpubPane({
     webRef.current.injectJavaScript(`window.__openBook();true;`);
   }
 
+  /** 执行翻页（手势桥接消息 → shared 模型判定 → 回注页面 __scNav） */
+  function navTo(dir: 'next' | 'prev') {
+    webRef.current?.injectJavaScript(
+      `window.__scNav && window.__scNav('${dir}');true;`,
+    );
+  }
+
   function onMessage(e: any) {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
@@ -474,6 +483,20 @@ function EpubPane({
       }
       if (msg.t === 'progress') onProgress(msg.page, msg.total);
       if (msg.t === 'error') setError(msg.message);
+      // 手势桥接：桥接 JS 只报原始手势，语义判定统一在 RN 侧（消费 shared 模型）
+      if (msg.t === 'tap') {
+        const action = tapZoneAction(
+          msg.x,
+          Dimensions.get('window').width,
+          prefs.swipeDirection,
+        );
+        navTo(action === 'next' ? 'next' : 'prev');
+      }
+      if (msg.t === 'swipe') {
+        // 与 Web EpubViewer 逐字一致：(dx > 0) === (方向为 left-next) 即下一页
+        const isNext = (msg.dx > 0) === (prefs.swipeDirection === 'left-next');
+        navTo(isNext ? 'next' : 'prev');
+      }
     } catch {
       // 非 JSON 忽略
     }
