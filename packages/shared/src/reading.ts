@@ -9,8 +9,8 @@
 /** 字号档位（百分比） */
 export const FONT_STEPS = [80, 90, 100, 110, 125, 140, 160, 180];
 
-/** 行距档位（倍数） */
-export const LINE_HEIGHTS = [1.4, 1.6, 1.9, 2.2];
+/** 行距档位（倍数）—— 与冻结交互规格 docs/reader-interaction.md 完全一致 */
+export const LINE_HEIGHTS = [1.4, 1.6, 1.8, 2.0];
 
 /** 左右页边距档位（px） */
 export const MARGINS = [10, 24, 48, 80];
