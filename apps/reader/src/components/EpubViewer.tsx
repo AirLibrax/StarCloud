@@ -8,7 +8,6 @@ import {
   MARGINS,
   type PageMode,
   type SwipeLayout,
-  type VerticalStyle,
   type SwipeDirection,
 } from '@starcloud/shared';
 import { getToken } from '../api/client';
@@ -21,18 +20,19 @@ interface Props {
   onProgress: (currentPage: number, totalPages: number) => void;
 }
 
-/* ---------------- 偏好持久化 ---------------- */
+/* ---------------- 偏好持久化（键名与冻结规格第六节一致） ---------------- */
 
 const FONT_KEY = 'starcloud.fontStep';
 const LINE_KEY = 'starcloud.lineHeight';
 const MARGIN_KEY = 'starcloud.margin';
 const MODE_KEY = 'starcloud.pageMode';
 const LAYOUT_KEY = 'starcloud.swipeLayout';
-const VSTYLE_KEY = 'starcloud.verticalStyle';
 const DIR_KEY = 'starcloud.swipeDirection';
 const SPREAD_KEY = 'starcloud.spreadTwoUp';
 /** 双列排版生效的最小视口宽度：仅平板横屏/桌面（>900px）允许双列 */
 const SPREAD_MIN_WIDTH = 900;
+/** 左右滑动手势触发阈值（px），与 App 端一致 */
+const SWIPE_DX_THRESHOLD = 50;
 
 function readIdx(key: string, len: number, fallback: number): number {
   const saved = parseInt(localStorage.getItem(key) ?? '', 10);
@@ -47,17 +47,13 @@ function readSwipeLayout(): SwipeLayout {
   return localStorage.getItem(LAYOUT_KEY) === 'vertical' ? 'vertical' : 'horizontal';
 }
 
-function readVerticalStyle(): VerticalStyle {
-  return localStorage.getItem(VSTYLE_KEY) === 'paged' ? 'paged' : 'continuous';
-}
-
 function readDirection(): SwipeDirection {
   return localStorage.getItem(DIR_KEY) === 'right-next'
     ? 'right-next'
     : 'left-next';
 }
 
-/** 单列/双列偏好（是否实际生效还受视口宽度约束，见 SPREAD_MIN_WIDTH） */
+/** 单列/双列偏好（是否实际生效还受视口宽度与设备能力约束，见 twoUp） */
 function readSpreadTwoUpPref(): boolean {
   return localStorage.getItem(SPREAD_KEY) !== 'single';
 }
@@ -73,21 +69,41 @@ function modeLabel(m: PageMode): string {
   return m === 'tap' ? '点击翻页' : '滑动翻页';
 }
 
+/** 取当前渲染器的位置 CFI（default manager 同步返回；取不到回退章节序号） */
+function currentCfi(rendition: any, fallbackIdx: number | null): string | undefined {
+  try {
+    const loc = rendition.currentLocation();
+    const cfi = loc?.start?.cfi;
+    if (typeof cfi === 'string' && cfi.length > 0) return cfi;
+  } catch {
+    // 尚无位置信息
+  }
+  // 无 CFI 时回退到会话内章节序号，避免 display(undefined) 跳回书首
+  return fallbackIdx != null ? String(fallbackIdx) : undefined;
+}
+
 /**
- * EPUB 渲染器。
+ * EPUB 渲染器（实现 docs/reader-interaction.md 冻结规格）。
  *
  * 翻页方式二选一（shared.PageMode）：
- * - tap:   点击翻页 —— 屏幕左右两半，含义随方向偏好；
- *          书页对指针透明（pointer-events:none），所有点击由外层容器
- *          统一做分区判定，避免与引擎内置行为双重触发。
- * - swipe: 滑动翻页 —— 触屏上左右滑动或上下滑动（引擎原生触摸），
- *          桌面端自动降级为上下无缝滚动（滚轮阅读）；
- * 单列/双列：视口 >900px（平板横屏/桌面）且用户开启双列时 spread='always'，
- * 否则 'none'；视口/容器尺寸变化自动重排防截断，窄屏隐藏切换按钮。
- *          上下滑动为连续渲染（跨章无缝），暂无单页样式。
+ * - tap:   点击翻页 —— 书页 iframe 对指针透明（.no-pointer），
+ *          所有点击落在外层 .epub-viewer 容器，由 shared.tapZoneAction()
+ *          按「翻页方向」偏好做左右两半分区判定；
+ * - swipe: 滑动翻页 ——
+ *   · 触屏 + horizontal：书页同样 pe:none，外层容器 touchstart/touchend
+ *     判定 |dx|>50，isNext = (dx>0)===(方向为 left-next)；
+ *   · 触屏 + vertical：flow=scrolled + manager=continuous，
+ *     整章连成一条无缝滚动、滚到底自动接下一章；
+ *   · 桌面（非触屏）：固定上下无缝滚动（同一连续渲染），强制单列，
+ *     工具栏单/双列按钮禁用显示 ∅。
+ * 单列/双列：视口 >900px（平板横屏/桌面）且用户开启双列偏好且非
+ * 桌面滑动模式时 spread='always'，其余一律 'none'；
+ * 视口跨过门槛自动重排防截断，窄屏隐藏切换按钮。
  *
- * 结构性变化通过 rebuildTick 整体重建渲染器，以章节序号衔接位置；
- * 字号/行距等非结构性变化直接热应用。
+ * 结构性变化（pageMode/swipeLayout/spread）通过 rebuildTick 整体重建
+ * 渲染器，以章节序号衔接位置；refs 在渲染期与 state 严格同步。
+ * 键盘双通道均挂 keydown：window（焦点在外层）+ iframe document 捕获
+ * 阶段（焦点在书页内，applyDocHandlers 注入，relocated 后对新 iframe 重放）。
  */
 export default function EpubViewer({
   bookId,
@@ -120,29 +136,37 @@ export default function EpubViewer({
 
   /* ---- 翻页偏好状态 ---- */
   const [pageMode, setPageMode] = useState<PageMode>(readPageMode);
-  const [swipeLayout, setSwipeLayout] = useState<SwipeLayout>(readSwipeLayout);
+  const [swipeLayout, setSwipeLayout] = useState<SwipeLayout>(() => {
+    // 桌面（无触屏）选滑动翻页：固定上下无缝滚动，无轴向子选项
+    const stored = readSwipeLayout();
+    return readPageMode() === 'swipe' && !isTouch ? 'vertical' : stored;
+  });
   const [swipeDir, setSwipeDir] = useState<SwipeDirection>(readDirection);
   const [twoUpPref, setTwoUpPref] = useState(readSpreadTwoUpPref);
   /** 视口宽度是否达到双列门槛（>900px：平板横屏/桌面） */
   const [isWide, setIsWide] = useState(() => window.innerWidth > SPREAD_MIN_WIDTH);
-  /** 实际生效的单列/双列 = 用户偏好 ∩ 视口宽度 */
-  const twoUp = twoUpPref && isWide;
 
   /** 结构性变化时 +1：触发渲染器整体重建 */
   const [rebuildTick, setRebuildTick] = useState(0);
 
-  /* ---- refs：一次性初始化的 effect 始终拿到最新值 ---- */
+  /** 桌面滑动翻页：固定上下无缝滚动 + 强制单列（规格二/四） */
+  const desktopSwipe = pageMode === 'swipe' && !isTouch;
+  /** 实际生效的单列/双列 = 用户偏好 ∩ 视口宽度 ∩ 非桌面滑动强制单列 */
+  const twoUp = twoUpPref && isWide && !desktopSwipe;
+
+  /* ---- refs：渲染期与 state 严格同步（规格七.4），
+     —— 一次性初始化的 effect / 事件处理一律读 ref，保证重建拿到最新配置 ---- */
   const fontSizeRef = useRef(FONT_STEPS[stepIndex] ?? 100);
   const lineHeightRef = useRef(LINE_HEIGHTS[lineHeightIdx]);
   const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
   const lastNavAtRef = useRef(0);
-  const pageModeRef = useRef<PageMode>(readPageMode());
-  const swipeLayoutRef = useRef<SwipeLayout>(readSwipeLayout());
-  const swipeDirRef = useRef<SwipeDirection>(readDirection());
+  const pageModeRef = useRef<PageMode>(pageMode);
+  const swipeLayoutRef = useRef<SwipeLayout>(swipeLayout);
+  const swipeDirRef = useRef<SwipeDirection>(swipeDir);
   const twoUpRef = useRef(twoUp);
-  const twoUpPrefRef = useRef(twoUpPref);
-  // 渲染期同步：一次性初始化的 effect 始终拿到最新值
-  twoUpPrefRef.current = twoUpPref;
+  pageModeRef.current = pageMode;
+  swipeLayoutRef.current = swipeLayout;
+  swipeDirRef.current = swipeDir;
   twoUpRef.current = twoUp;
   const lastSpineIdxRef = useRef<number | null>(null);
   /** 进度上报守卫：章节变化才报（防抖在父组件） */
@@ -151,6 +175,7 @@ export default function EpubViewer({
   const goPrev = useCallback(() => renditionRef.current?.prev(), []);
   const goNext = useCallback(() => renditionRef.current?.next(), []);
 
+  /** 键盘翻页冷却（规格三：400ms 防连击穿透；仅键盘路径使用） */
   function navigateWithCooldown(dir: 'prev' | 'next') {
     const now = Date.now();
     if (now - lastNavAtRef.current < 400) return;
@@ -195,7 +220,7 @@ export default function EpubViewer({
   const keyHandler = useCallback(
     (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
-      // 下箭头恒为下一页，上箭头恒为上一页
+      // 下箭头恒为下一页，上箭头恒为上一页（规格三）
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         goNext();
@@ -206,12 +231,12 @@ export default function EpubViewer({
         goPrev();
         return;
       }
-      // 左右方向键跟随方向偏好
+      // 左右箭头跟随方向偏好（规格三：left-next 时 → 为下一页）：
+      // 与滑动/点击同一镜像模型 —— (按的是右箭头) === (方向为 left-next) 即下一页
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
-        const isRightKey = e.key === 'ArrowRight';
-        const leftMeansNext = swipeDirRef.current === 'left-next';
-        const isNext = isRightKey ? !leftMeansNext : leftMeansNext;
+        const isNext =
+          (e.key === 'ArrowRight') === (swipeDirRef.current === 'left-next');
         navigateCooldownRef.current(isNext ? 'next' : 'prev');
       }
     },
@@ -219,10 +244,24 @@ export default function EpubViewer({
   );
   keyHandlerRef.current = keyHandler;
 
-  /* ---- 渲染器初始化（bookId / rebuildTick 变化才重建） ---- */
+  /* ---- 渲染器初始化（bookId / rebuildTick 变化才整体重建） ---- */
   useEffect(() => {
     let cancelled = false;
     let localRendition: any = null;
+
+    const container = containerRef.current;
+    const mode = pageModeRef.current;
+    const layout = swipeLayoutRef.current;
+    /** 上下滑动：连续渲染，跨章无缝（规格二） */
+    const isVerticalScroll = mode === 'swipe' && layout === 'vertical';
+    /** 页面对指针透明：tap 与 swipe+horizontal（规格二/七.3） */
+    const needsNoPointer =
+      mode === 'tap' || (mode === 'swipe' && layout === 'horizontal');
+
+    // 重建开始即重置状态，并在取回文件前就把 no-pointer 类切到新模式
+    setReady(false);
+    setLoadError(null);
+    container?.classList.toggle('no-pointer', needsNoPointer);
 
     (async () => {
       try {
@@ -236,27 +275,12 @@ export default function EpubViewer({
         const ebook = ePub(buffer);
         bookRef.current = ebook;
 
-        // 点击翻页 / 左右滑动模式：书页对指针事件完全透明（CSS .no-pointer），
-        // 引擎收不到任何点击/触摸，交互全部由外层容器的统一判定处理
-        const mode = pageModeRef.current;
-        if (
-          mode === 'tap' ||
-          (mode === 'swipe' && swipeLayoutRef.current === 'horizontal')
-        ) {
-          containerRef.current!.classList.add('no-pointer');
-        } else {
-          containerRef.current!.classList.remove('no-pointer');
-        }
-
-        localRendition = ebook.renderTo(containerRef.current!, {
+        localRendition = ebook.renderTo(container!, {
           width: '100%',
           height: '100%',
-          flow:
-            mode === 'swipe' && swipeLayoutRef.current === 'vertical'
-              ? 'scrolled'
-              : 'paginated',
-          manager: 'default',
-          spread: twoUpRef.current ? 'always' : 'none',
+          flow: isVerticalScroll ? 'scrolled' : 'paginated',
+          manager: isVerticalScroll ? 'continuous' : 'default',
+          spread: isVerticalScroll ? 'none' : twoUpRef.current ? 'always' : 'none',
         });
         renditionRef.current = localRendition;
         localRendition.themes.register('paper', {
@@ -287,19 +311,17 @@ export default function EpubViewer({
           }
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
+          // 新渲染的章节 iframe 也要种上捕获阶段 keydown（continuous 会追加 iframe）
+          applyDocHandlersRef.current();
         }
 
-        // iframe 内按键代理
-        localRendition.on('keyup', (e: KeyboardEvent) =>
-          keyHandlerRef.current(e),
-        );
         localRendition.on('relocated', onRelocated);
 
         await ebook.ready;
         if (cancelled) return;
         totalChapters = ((ebook.spine as any)?.items as any[])?.length ?? 0;
 
-        // 优先回到本会话内上次所在章节，其次按历史百分比
+        // 优先回到本会话内上次所在章节，其次按历史百分比（规格六）
         const startIdx =
           lastSpineIdxRef.current ??
           Math.min(
@@ -308,7 +330,9 @@ export default function EpubViewer({
           );
 
         await localRendition.display(startIdx > 0 ? startIdx : undefined);
-        if (!cancelled) setReady(true);
+        if (cancelled) return;
+        applyDocHandlersRef.current();
+        setReady(true);
       } catch (err) {
         if (!cancelled)
           setLoadError(err instanceof Error ? err.message : String(err));
@@ -316,6 +340,7 @@ export default function EpubViewer({
     })();
 
     return () => {
+      // 整体重建：旧 rendition 与 book 彻底销毁（规格七.4）
       cancelled = true;
       try {
         localRendition?.destroy();
@@ -361,7 +386,7 @@ export default function EpubViewer({
     localStorage.setItem(MARGIN_KEY, String(marginIdx));
   }, [marginIdx]);
 
-  /* ---- 视口宽度跟踪：双列门槛与容器重排 ---- */
+  /* ---- 视口宽度跟踪：双列门槛与容器重排（规格四） ---- */
 
   // 窗口 resize / 横竖屏切换时刷新「视口是否够宽」
   useEffect(() => {
@@ -376,21 +401,18 @@ export default function EpubViewer({
     };
   }, []);
 
-  /** 视口跨过双列门槛：切换 spread 并按当前章节重排（防截断） */
+  /** 视口跨过双列门槛：切换 spread 并按当前位置重排（防截断） */
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!readyRef.current || !rendition) return;
-    const nextSpread = twoUpPrefRef.current && isWide ? 'always' : 'none';
+    // twoUpRef 已含全部规则（偏好 ∩ 视口宽度 ∩ 桌面滑动强制单列）
+    const nextSpread = twoUpRef.current ? 'always' : 'none';
     if (rendition.settings?.spread === nextSpread) return;
-    let cfi: string | undefined;
-    try {
-      cfi = rendition.currentLocation()?.start?.cfi;
-    } catch {
-      // 尚无位置信息
-    }
+    const cfi = currentCfi(rendition, lastSpineIdxRef.current);
     rendition.spread(nextSpread);
     rendition.clear();
     rendition.display(cfi ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWide]);
 
   /** 容器尺寸变化 → rendition.resize() 重排（引擎自带 window resize 监听，此处兜底容器级变化） */
@@ -412,8 +434,9 @@ export default function EpubViewer({
   }, []);
 
   /**
-   * 向章节 iframe 文档注入捕获阶段的按键监听。
-   * 焦点在书页内时，按键按下瞬间即触发翻页（不经引擎转发、不等松手）。
+   * 向章节 iframe 文档注入捕获阶段的按键监听（规格三/七.1 通道二）。
+   * 焦点在书页内时，按键按下瞬间即触发翻页（keydown，非 keyup）。
+   * relocated 后对新 iframe 重放；__scKeydown 标记防止重复注入。
    */
   const applyDocHandlers = useCallback(() => {
     try {
@@ -428,7 +451,7 @@ export default function EpubViewer({
         );
       }
     } catch {
-      // 文档未就绪时忽略，翻页后重放
+      // 文档未就绪时忽略，relocated 后重放
     }
   }, []);
   const applyDocHandlersRef = useRef(applyDocHandlers);
@@ -436,35 +459,29 @@ export default function EpubViewer({
 
   /** 切换单列/双列偏好；窄屏（未达双列门槛）只改偏好，不应用 */
   function toggleSpread() {
-    const rendition = renditionRef.current;
-    if (!rendition || !ready) return;
+    if (!ready || desktopSwipe) return;
     const next = !twoUpPref;
     setTwoUpPref(next);
-    twoUpPrefRef.current = next;
     localStorage.setItem(SPREAD_KEY, next ? 'two-up' : 'single');
     if (!isWide) return;
 
-    let cfi: string | undefined;
-    try {
-      cfi = rendition.currentLocation()?.start?.cfi;
-    } catch {
-      // 尚无位置信息
-    }
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    const cfi = currentCfi(rendition, lastSpineIdxRef.current);
     rendition.spread(next ? 'always' : 'none');
     rendition.clear();
     rendition.display(cfi ?? undefined);
   }
 
   /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置。
-   *  桌面（非触屏）选滑动翻页时自动降级为上下无缝滚动（滚轮阅读）。 */
+   *  桌面（非触屏）选滑动翻页时自动降级为上下无缝滚动（滚轮阅读）。
+   *  （refs 由渲染期同步自动跟随 state，无需手工赋值） */
   function changePageMode(mode: PageMode) {
     if (mode === pageMode || !ready) return;
     setPageMode(mode);
-    pageModeRef.current = mode;
     localStorage.setItem(MODE_KEY, mode);
 
     if (mode === 'swipe' && !isTouch) {
-      swipeLayoutRef.current = 'vertical';
       setSwipeLayout('vertical');
       localStorage.setItem(LAYOUT_KEY, 'vertical');
     }
@@ -476,46 +493,72 @@ export default function EpubViewer({
   function changeSwipeLayout(layout: SwipeLayout) {
     if (layout === swipeLayout || !ready) return;
     setSwipeLayout(layout);
-    swipeLayoutRef.current = layout;
     localStorage.setItem(LAYOUT_KEY, layout);
     setRebuildTick((t) => t + 1);
   }
 
   function changeDirection(dir: SwipeDirection) {
+    if (dir === swipeDir) return;
     setSwipeDir(dir);
-    swipeDirRef.current = dir;
     localStorage.setItem(DIR_KEY, dir);
   }
 
-  // 触摸滑动翻页（滑动翻页·左右轴向）
-  const touchStartX = useRef<number | null>(null);
-  function onTouchStart(e: React.TouchEvent) {
-    touchStartX.current =
-      pageMode === 'swipe' && swipeLayout === 'horizontal'
-        ? e.touches[0].clientX
-        : null;
+  /* ---- 点击分区（tap 模式）：事件落在 .epub-viewer，
+     —— 因为 no-pointer 时容器与 iframe 对指针透明，命中测试穿透到外层。
+     —— 仅当 e.target === e.currentTarget 才判定，工具栏/面板点击不受影响 ---- */
+  function handleReadingClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.target !== e.currentTarget) return;
+    if (pageModeRef.current !== 'tap' || !readyRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const action = tapZoneAction(
+      e.clientX - rect.left,
+      rect.width,
+      swipeDirRef.current,
+    );
+    action === 'next' ? goNext() : goPrev();
   }
-  function onTouchEnd(e: React.TouchEvent) {
-    if (
-      touchStartX.current === null ||
-      pageMode !== 'swipe' ||
-      swipeLayout !== 'horizontal' ||
-      !ready
-    ) {
+
+  /* ---- 左右滑动（swipe+horizontal）：外层容器 touchstart/touchend 判定 ---- */
+  const touchStartX = useRef<number | null>(null);
+  function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    if (e.target !== e.currentTarget) {
       touchStartX.current = null;
       return;
     }
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(dx) > 50) {
-      // 「向左下一页」= 从左向右滑（dx>0）；「向右下一页」反之
-      const isNext = (dx > 0) === (swipeDir === 'left-next');
+    const active =
+      pageModeRef.current === 'swipe' && swipeLayoutRef.current === 'horizontal';
+    touchStartX.current = active ? e.touches[0].clientX : null;
+  }
+  function handleTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
+    const startX = touchStartX.current;
+    touchStartX.current = null;
+    if (startX === null) return;
+    if (
+      pageModeRef.current !== 'swipe' ||
+      swipeLayoutRef.current !== 'horizontal' ||
+      !readyRef.current
+    ) {
+      return;
+    }
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > SWIPE_DX_THRESHOLD) {
+      // 规格二：isNext = (dx > 0) === (方向为 left-next)
+      const isNext = (dx > 0) === (swipeDirRef.current === 'left-next');
       isNext ? goNext() : goPrev();
     }
-    touchStartX.current = null;
   }
 
+  const showDirectionRow =
+    pageMode === 'tap' ||
+    (pageMode === 'swipe' && isTouch && swipeLayout === 'horizontal');
+
   return (
-    <div className="epub-viewer">
+    <div
+      className="epub-viewer"
+      onClick={handleReadingClick}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="epub-toolbar">
         <div className="toolbar-left">
           <Link to="/" className="btn">← 书架</Link>
@@ -529,10 +572,15 @@ export default function EpubViewer({
                 : '')}
         </span>
         <div className="toolbar-right">
-          {/* 单列/双列排版切换（视口未达双列门槛时隐藏，强制单列） */}
+          {/* 单列/双列排版切换：仅视口 >900px 显示；桌面滑动模式禁用显示 ∅ */}
           {isWide && (
-            <button className="btn spread-btn" onClick={toggleSpread} disabled={!ready}>
-              {twoUp ? '双列' : '单列'}
+            <button
+              className="btn spread-btn"
+              onClick={toggleSpread}
+              disabled={!ready || desktopSwipe}
+              title={desktopSwipe ? '桌面滑动翻页固定为上下连续滚动，强制单列' : '单列/双列排版'}
+            >
+              {desktopSwipe ? '∅' : twoUp ? '双列' : '单列'}
             </button>
           )}
           <button
@@ -657,6 +705,31 @@ export default function EpubViewer({
                   >
                     上下滑动
                   </button>
+                </div>
+              </div>
+            )}
+
+            {showDirectionRow && (
+              <div className="setting-row">
+                <div className="setting-label">
+                  <span>翻页方向</span>
+                  <span>{swipeDir === 'left-next' ? '向左下一页' : '向右下一页'}</span>
+                </div>
+                <div className="segment-group">
+                  {(
+                    [
+                      ['left-next', '向左下一页'],
+                      ['right-next', '向右下一页'],
+                    ] as [SwipeDirection, string][]
+                  ).map(([d, label]) => (
+                    <button
+                      key={d}
+                      className={`segment-btn${swipeDir === d ? ' active' : ''}`}
+                      onClick={() => changeDirection(d)}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
