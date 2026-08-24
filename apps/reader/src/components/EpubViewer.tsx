@@ -145,6 +145,8 @@ export default function EpubViewer({
   twoUpPrefRef.current = twoUpPref;
   twoUpRef.current = twoUp;
   const lastSpineIdxRef = useRef<number | null>(null);
+  /** 进度上报守卫：章节变化才报（防抖在父组件） */
+  const lastReportedIdxRef = useRef<number | null>(null);
 
   const goPrev = useCallback(() => renditionRef.current?.prev(), []);
   const goNext = useCallback(() => renditionRef.current?.next(), []);
@@ -278,7 +280,11 @@ export default function EpubViewer({
           const idx = location?.start?.index ?? 0;
           lastSpineIdxRef.current = idx;
           setChapter({ current: idx + 1, total: totalChapters });
-          onProgress(idx + 1, totalChapters);
+          // 章节变化才报进度（连续滚动模式下 relocated 高频触发，避免上报风暴）
+          if (lastReportedIdxRef.current !== idx) {
+            lastReportedIdxRef.current = idx;
+            onProgress(idx + 1, totalChapters);
+          }
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
         }

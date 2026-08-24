@@ -60,6 +60,38 @@
 禁止把 touch/click 监听挂在外层容器元素上指望收到书页内的事件——
 那是无效通道（tap 模式下书页 pe:none 时除外，此时事件本来就落在外层）。
 
+## 持久化规则
+
+### 阅读偏好（三端一致，档位常量同源 shared）
+
+Web 端逐项存 `localStorage`，App 端聚合存 AsyncStorage 单键 JSON，
+字段含义与默认值两侧一致（默认：100% 字号 / 1.6 行距 / 中边距 /
+tap / horizontal / continuous / left-next）。
+
+| Web localStorage 键 | 值 | App readingPrefs 字段 | 默认 |
+|---------------------|-----|------------------------|------|
+| `starcloud.fontStep` | FONT_STEPS 索引 | `fontStep` | 2（100%） |
+| `starcloud.lineHeight` | LINE_HEIGHTS 索引 | `lineHeightIdx` | 1（1.6） |
+| `starcloud.margin` | MARGINS 索引 | `marginIdx` | 1（中） |
+| `starcloud.pageMode` | `'tap' \| 'swipe'` | `pageMode` | `'tap'` |
+| `starcloud.swipeLayout` | `'horizontal' \| 'vertical'` | `swipeLayout` | `'horizontal'` |
+| `starcloud.verticalStyle` | `'continuous' \| 'paged'` | `verticalStyle` | `'continuous'` |
+| `starcloud.swipeDirection` | `'left-next' \| 'right-next'` | `swipeDirection` | `'left-next'` |
+| `starcloud.spreadTwoUp` | `'two-up' \| 'single'` | （App 无，暂无双列） | 双列（视口 >900px 生效） |
+
+App 端其余 AsyncStorage 键：`starcloud.settings`（服务器地址/令牌/用户名）、
+`starcloud.localBooks`（本地书库与本地进度）。
+
+### 阅读进度
+
+- 上报触发：**章节变化才报** —— EPUB 以 spine index 变化为准
+  （连续滚动模式下 relocated 高频触发，按章节去重）；
+  TXT 以估算页码变化为准；
+- 防抖 **3s**（两端一致），失败静默不打断阅读；
+- Web：仅上报服务器 `POST /api/progress`，无本地进度存储；
+- App：云端书上报服务器；本地书写入 `starcloud.localBooks` 内联 progress；
+  云端下载书（cloudBookId）本地与服务器双写。
+
 ## 性能
 
 - manager=continuous 会预加载相邻章节，跨章翻页即时；

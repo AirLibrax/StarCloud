@@ -77,7 +77,8 @@ export default function ReaderPage() {
     };
   }, [bookId]);
 
-  /** TXT 滚动 → 进度换算（防抖由调用方控制） */
+  /** TXT 滚动 → 进度换算（防抖由 scheduleReport 控制） */
+  const lastTxtPageRef = useRef(-1);
   function handleScroll() {
     const el = contentRef.current;
     if (!el || !txtContent || !book) return;
@@ -94,13 +95,16 @@ export default function ReaderPage() {
       percentage,
       updatedAt: p?.updatedAt ?? '',
     }));
+    // 页变化才上报（与 App 端 TxtPane 一致；显示更新不受影响）
+    if (currentPage === lastTxtPageRef.current) return;
+    lastTxtPageRef.current = currentPage;
     scheduleReport(currentPage, totalPages);
   }
 
   const reportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   function scheduleReport(page: number, total: number) {
     clearTimeout(reportTimer.current);
-    reportTimer.current = setTimeout(() => reportProgress(page, total), 1500);
+    reportTimer.current = setTimeout(() => reportProgress(page, total), 3000);
   }
 
   /** TXT 恢复到上次阅读位置 */
