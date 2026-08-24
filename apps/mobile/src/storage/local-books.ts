@@ -15,6 +15,8 @@ export interface LocalBook {
   /** App 私有目录内的文件 URI */
   fileUri: string;
   importedAt: string;
+  /** 若由云端下载而来，记录服务器书籍 id，阅读进度双写 */
+  cloudBookId?: number;
   /** 本地阅读进度（与云端结构一致） */
   progress: {
     currentPage: number;
@@ -70,7 +72,57 @@ export async function listLocalBooks(): Promise<LocalBook[]> {
   }
 }
 
-async function saveList(books: LocalBook[]): Promise<void> {
+/**
+ * 把云端书籍下载到本地书库（已存在则直接返回）。
+ * 下载完成后该书完全离线可读，进度仍同步回服务器。
+ */
+export async function ensureCloudBookDownloaded(cloud: {
+  id: number;
+  title: string;
+  volume: number | null;
+  author: string | null;
+  fileType: string;
+  fileUrl: string;
+}): Promise<LocalBook> {
+  const books = await listLocalBooks();
+  const existing = books.find((b) => b.cloudBookId === cloud.id);
+  if (existing) return existing;
+
+  const LegacyFS = require('expo-file-system/legacy');
+  const ext = cloud.fileType === 'epub' ? '.epub' : cloud.fileType === 'pdf' ? '.pdf' : '.txt';
+  const dir = `${LegacyFS.documentDirectory}books/`;
+  await LegacyFS.makeDirectoryAsync(dir, { intermediates: true });
+  const id = `c${cloud.id}`;
+  const dest = `${dir}${id}${ext}`;
+
+  const res = await LegacyFS.downloadAsync(cloud.fileUrl, dest);
+  if (res.status !== 200) {
+    await LegacyFS.deleteAsync(dest, { idempotent: true });
+    throw new Error(`下载失败（HTTP ${res.status}）`);
+  }
+
+  const book: LocalBook = {
+    id,
+    title: cloud.title,
+    volume: cloud.volume,
+    author: cloud.author,
+    fileType: cloud.fileType as BookFileType,
+    fileSize: res.headers['Content-Length'] ? Number(res.headers['Content-Length']) : 0,
+    fileUri: dest,
+    importedAt: new Date().toISOString(),
+    cloudBookId: cloud.id,
+    progress: null,
+  };
+  books.unshift(book);
+  await saveList(books);
+  return book;
+}
+
+export async function findLocalByCloudId(cloudId: number): Promise<LocalBook | undefined> {
+  return (await listLocalBooks()).find((b) => b.cloudBookId === cloudId);
+}
+
+export async function saveList(books: LocalBook[]): Promise<void> {
   await AsyncStorage.setItem(LIST_KEY, JSON.stringify(books));
 }
 

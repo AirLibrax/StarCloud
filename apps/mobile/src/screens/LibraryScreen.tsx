@@ -11,10 +11,11 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../App';
 import type { CloudShelfItem, ApiError } from '../api/client';
-import { fetchShelf } from '../api/client';
+import { fetchShelf, fileUrl } from '../api/client';
 import {
   listLocalBooks,
   importLocalBook,
+  ensureCloudBookDownloaded,
   type LocalBook,
 } from '../storage/local-books';
 import { getSettings } from '../storage/settings';
@@ -74,6 +75,12 @@ export default function LibraryScreen() {
   }
 
   function openCloud(item: CloudShelfItem) {
+    // 已下载到本地的云端书直接读本地副本（离线可用）
+    const local = localBooks.find((b) => b.cloudBookId === item.book.id);
+    if (local) {
+      openLocal(local);
+      return;
+    }
     navigation.navigate('Reader', {
       title:
         item.book.volume != null
@@ -84,6 +91,23 @@ export default function LibraryScreen() {
       bookId: item.book.id,
       initialPercentage: item.progress?.percentage ?? 0,
     });
+  }
+
+  async function handleDownload(item: CloudShelfItem) {
+    try {
+      await ensureCloudBookDownloaded({
+        id: item.book.id,
+        title: item.book.title,
+        volume: item.book.volume,
+        author: item.book.author,
+        fileType: item.book.fileType,
+        fileUrl: fileUrl(item.book.id),
+      });
+      setLocalBooks(await listLocalBooks());
+      Alert.alert('已下载', `《${item.book.title}》可离线阅读`);
+    } catch (err) {
+      Alert.alert('下载失败', err instanceof Error ? err.message : String(err));
+    }
   }
 
   function openLocal(book: LocalBook) {
@@ -103,6 +127,8 @@ export default function LibraryScreen() {
     onPress?: () => void;
     badge?: string;
     progressText?: string;
+    cloudItem?: CloudShelfItem;
+    downloaded?: boolean;
   }[] = [
     {
       key: 'import',
@@ -126,6 +152,8 @@ export default function LibraryScreen() {
       onPress: () => openCloud(i),
       badge: i.book.fileType.toUpperCase(),
       progressText: i.progress ? `${i.progress.percentage}%` : undefined,
+      cloudItem: i,
+      downloaded: localBooks.some((b) => b.cloudBookId === i.book.id),
     })),
   ];
 
@@ -206,7 +234,26 @@ export default function LibraryScreen() {
               </Text>
             </View>
             {item.progressText && (
-              <Text style={{ color: '#8a8072', fontSize: 12 }}>{item.progressText}</Text>
+              <Text style={{ color: '#8a8072', fontSize: 12, marginRight: 8 }}>
+                {item.progressText}
+              </Text>
+            )}
+            {item.cloudItem && !item.downloaded && (
+              <TouchableOpacity
+                onPress={() => handleDownload(item.cloudItem!)}
+                style={{
+                  borderWidth: 1,
+                  borderColor: '#3f5a70',
+                  borderRadius: 4,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                }}
+              >
+                <Text style={{ color: '#9fb8c9', fontSize: 12 }}>下载</Text>
+              </TouchableOpacity>
+            )}
+            {item.cloudItem && item.downloaded && (
+              <Text style={{ color: '#4a6b4a', fontSize: 12 }}>已下载</Text>
             )}
           </TouchableOpacity>
         )}
