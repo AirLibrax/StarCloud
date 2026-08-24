@@ -237,19 +237,23 @@ export default function EpubViewer({
 
         const ebook = ePub(buffer);
         bookRef.current = ebook;
-        localRendition = ebook.renderTo(containerRef.current!, {
+        // axis 竖向翻页为 epubjs 运行时能力，官方类型声明缺失，此处断言绕过
+        const renderOptions: any = {
           width: '100%',
           height: '100%',
           flow:
-            mode === 'swipe' && swipeLayoutRef.current === 'vertical'
+            mode === 'swipe' && swipeLayoutRef.current === 'vertical' && verticalStyleRef.current === 'continuous'
               ? 'scrolled'
               : 'paginated',
           manager:
-            mode === 'swipe' && swipeLayoutRef.current === 'vertical'
+            mode === 'swipe' && swipeLayoutRef.current === 'vertical' && verticalStyleRef.current === 'continuous'
               ? 'continuous'
               : 'default',
-          spread: twoUpRef.current ? 'always' : 'none',
-        });
+        };
+        if (mode === 'swipe' && swipeLayoutRef.current === 'vertical' && verticalStyleRef.current === 'paged') {
+          renderOptions.axis = 'vertical';
+        }
+        localRendition = ebook.renderTo(containerRef.current!, renderOptions);
         renditionRef.current = localRendition;
         localRendition.themes.register('paper', {
           body: {
@@ -455,8 +459,8 @@ export default function EpubViewer({
     }
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     if (Math.abs(dx) > 50) {
-      const physicalNextIsLeft = swipeDir === 'left-next';
-      const isNext = (dx < 0) === physicalNextIsLeft;
+      // 「向左下一页」= 从左向右滑（dx>0）；「向右下一页」反之
+      const isNext = (dx > 0) === (swipeDir === 'left-next');
       isNext ? goNext() : goPrev();
     }
     touchStartX.current = null;
