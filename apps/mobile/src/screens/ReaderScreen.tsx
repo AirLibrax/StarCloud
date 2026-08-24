@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Pressable } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { WebView } from 'react-native-webview';
+import { PanGestureHandler, State, type PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../App';
@@ -23,13 +24,17 @@ import { buildOfflineEpubHtml } from '../reader/offline-epub';
 
  type Route = RouteProp<RootStackParamList, 'Reader'>;
 
+/** 边距档位名称（与 Web 阅读端一致） */
+const MARGIN_LABELS = ['窄', '中', '宽', '很宽'];
+
 /**
  * 阅读器（规格 F4/F5）：
  * - EPUB: WebView 内嵌 epubjs，与 Web 端同一套渲染逻辑
  * - PDF:  WebView 直载云端文件
- * - TXT:  原生渲染；分页式横向翻页 或 滚动式无缝拖动
+ * - TXT:  原生渲染；点击翻页（左右分区）或滑动翻页（左右手势/上下无缝）
  *
- * 排版偏好（字号/行距/边距）与翻页模式均持久化。
+ * 排版偏好（字号/行距/边距）与翻页方式均持久化，
+ * 翻页语义与 Web 端 EpubViewer 一致（消费 @starcloud/shared）。
  */
 export default function ReaderScreen() {
   const navigation = useNavigation();
@@ -44,7 +49,7 @@ export default function ReaderScreen() {
     updateReadingPrefs(patch).then(() => setPrefs(getReadingPrefs()));
   }
 
-  // 进度上报（防抖 1.5s，静默失败），本地书与云端书共用
+  // 进度上报（防抖 3s，章节/页变化才报，静默失败），本地书与云端书共用
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onProgress = useCallback(
     (currentPage: number, totalPages: number) => {
@@ -56,12 +61,10 @@ export default function ReaderScreen() {
         } else if (source === 'local' && localId != null) {
           saveLocalProgress(localId, currentPage, totalPages);
         }
-      }, 1500);
+      }, 3000);
     },
     [source, bookId, localId],
   );
-
-  const fontPx = (FONT_STEPS[prefs.fontStep] / 100) * 17;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.sheet }}>
@@ -119,15 +122,15 @@ export default function ReaderScreen() {
               onChange={(v) => patchPrefs({ fontStep: v })}
             />
             <SettingSlider
-              label="行距"
+              label="行间距"
               value={`${LINE_HEIGHTS[prefs.lineHeightIdx]} 倍`}
               max={LINE_HEIGHTS.length - 1}
               valueIdx={prefs.lineHeightIdx}
               onChange={(v) => patchPrefs({ lineHeightIdx: v })}
             />
             <SettingSlider
-              label="边距"
-              value={`${MARGINS[prefs.marginIdx]}px`}
+              label="左右边距"
+              value={MARGIN_LABELS[prefs.marginIdx]}
               max={MARGINS.length - 1}
               valueIdx={prefs.marginIdx}
               onChange={(v) => patchPrefs({ marginIdx: v })}
@@ -151,48 +154,7 @@ export default function ReaderScreen() {
               </View>
             </View>
 
-            {prefs.pageMode === 'swipe' && (
-              <View>
-                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
-                  滑动方向
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <SegmentBtn
-                    label="左右滑动"
-                    active={prefs.swipeLayout === 'horizontal'}
-                    onPress={() => patchPrefs({ swipeLayout: 'horizontal' })}
-                  />
-                  <SegmentBtn
-                    label="上下滑动"
-                    active={prefs.swipeLayout === 'vertical'}
-                    onPress={() => patchPrefs({ swipeLayout: 'vertical' })}
-                  />
-                </View>
-              </View>
-            )}
-
-            {prefs.pageMode === 'swipe' && prefs.swipeLayout === 'vertical' && (
-              <View>
-                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
-                  滚动样式
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <SegmentBtn
-                    label="无缝滚动"
-                    active={prefs.verticalStyle === 'continuous'}
-                    onPress={() => patchPrefs({ verticalStyle: 'continuous' })}
-                  />
-                  <SegmentBtn
-                    label="单页翻动"
-                    active={prefs.verticalStyle === 'paged'}
-                    onPress={() => patchPrefs({ verticalStyle: 'paged' })}
-                  />
-                </View>
-              </View>
-            )}
-
-            {(prefs.pageMode === 'tap' ||
-              (prefs.pageMode === 'swipe' && prefs.swipeLayout === 'horizontal')) && (
+            {prefs.pageMode === 'tap' && (
               <View>
                 <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
                   方向
@@ -211,40 +173,31 @@ export default function ReaderScreen() {
                 </View>
               </View>
             )}
+
+            {prefs.pageMode === 'swipe' && (
+              <View>
+                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                  滑动轴向
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SegmentBtn
+                    label="左右滑动"
+                    active={prefs.swipeLayout === 'horizontal'}
+                    onPress={() => patchPrefs({ swipeLayout: 'horizontal' })}
+                  />
+                  <SegmentBtn
+                    label="上下滑动"
+                    active={prefs.swipeLayout === 'vertical'}
+                    onPress={() => patchPrefs({ swipeLayout: 'vertical' })}
+                  />
+                </View>
+              </View>
+            )}
           </View>
         )}
       </View>
 
       {!fileType && null}
-
-      {fileType === 'epub' && (
-        <EpubLoader
-          source={source}
-          bookId={bookId}
-          localId={localId}
-          initialPercentage={initialPercentage}
-          prefs={prefs}
-          onProgress={onProgress}
-        />
-      )}
-
-      {/* 底部页码标注 */}
-      {pageInfo && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            bottom: 14,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: colors.textMuted, fontSize: 12, backgroundColor: 'rgba(251,247,238,0.85)', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 }}>
-            {pageInfo.page}/{pageInfo.total} 页
-          </Text>
-        </View>
-      )}
 
       {fileType === 'epub' && (
         <EpubLoader
@@ -290,17 +243,6 @@ export default function ReaderScreen() {
       )}
     </View>
   );
-}
-
-function describePageMode(p: {
-  pageMode: string;
-  pageAxis: string;
-  swipeDirection: string;
-}): string {
-  if (p.pageMode === 'scrolled') return '滚动式';
-  const axis = p.pageAxis === 'horizontal' ? '左右' : '上下';
-  const dir = p.swipeDirection === 'right-next' ? '·反向' : '';
-  return `分页·${axis}${dir}`;
 }
 
 function SettingSlider({
@@ -589,6 +531,8 @@ function TxtPane({
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const restored = useRef(false);
+  /** 上下滚动式“页变化才报”守卫 */
+  const lastTxtPageRef = useRef(-1);
 
   useEffect(() => {
     let cancelled = false;
@@ -616,15 +560,15 @@ function TxtPane({
   const totalPages =
     content === null ? 0 : Math.max(1, Math.ceil(content.length / CHARS_PER_PAGE));
 
-  /** 分页/点击翻页：按字符块切页；方向反转通过页序映射实现 */
+  /** 按字符块切页（tap 与 swipe+horizontal 共用，页序恒为自然顺序） */
   const pages: string[] = [];
-  if (content !== null && prefs.pageMode === 'tap') {
+  if (content !== null) {
     for (let i = 0; i < content.length; i += CHARS_PER_PAGE) {
       pages.push(content.slice(i, i + CHARS_PER_PAGE));
     }
   }
 
-  // 恢复上次位置（仅滚动式；分页式通过 display 序号处理）
+  // 恢复上次位置（仅上下无缝滚动式；分页式通过初始页码处理）
   const scrollRefCb = useCallback(
     (node: ScrollView | null) => {
       scrollRef.current = node;
@@ -674,6 +618,7 @@ function TxtPane({
   };
 
   if (prefs.pageMode === 'swipe' && prefs.swipeLayout === 'vertical') {
+    // 上下无缝滚动：整章连成一条，滚到底自动接下一章
     return (
       <ScrollView
         ref={scrollRefCb}
@@ -683,7 +628,11 @@ function TxtPane({
           const max = el.contentSize.height - el.layoutMeasurement.height;
           if (max <= 0) return;
           const ratio = el.contentOffset.y / max;
-          onProgress(Math.max(1, Math.ceil(totalPages * ratio)), totalPages);
+          const page = Math.max(1, Math.ceil(totalPages * ratio));
+          if (page !== lastTxtPageRef.current) {
+            lastTxtPageRef.current = page;
+            onProgress(page, totalPages);
+          }
         }}
         contentContainerStyle={{ padding: margin }}
       >
@@ -694,58 +643,89 @@ function TxtPane({
     );
   }
 
-  // 分页式：横向 paging 滑动 + 点击左右区域翻页；
-  // 方向反转：reverse 时把页数组倒序展示，「向右滑=下一页」的用户体验即成立
-  const ordered = prefs.swipeDirection === 'right-next' ? [...pages].reverse() : pages;
-  const displayIndex = ordered.findIndex(
-    (_, i) => Math.floor(initialPercentage / 100 * pages.length) === i,
+  // 分页式：tap = 点击左右分区；swipe+horizontal = 横滑手势（公式与 Web 一致）
+  const initialPage =
+    pages.length > 0
+      ? Math.min(pages.length - 1, Math.floor((initialPercentage / 100) * pages.length))
+      : 0;
+  return (
+    <PagedPane
+      pages={pages}
+      initialPage={initialPage}
+      margin={margin}
+      textStyle={textStyle}
+      prefs={prefs}
+      onProgress={onProgress}
+    />
+  );
+}
+
+/** 分页式 TXT：单页渲染 + 点击分区 / 横滑手势翻页 */
+function PagedPane({
+  pages,
+  initialPage,
+  margin,
+  textStyle,
+  prefs,
+  onProgress,
+}: {
+  pages: string[];
+  initialPage: number;
+  margin: number;
+  textStyle: { fontSize: number; lineHeight: number; color: string };
+  prefs: ReadingPrefs;
+  onProgress: (page: number, total: number) => void;
+}) {
+  const [idx, setIdx] = useState(initialPage);
+  const [width, setWidth] = useState(0);
+  const lastReportedRef = useRef(initialPage);
+
+  // 页变化才报进度（防抖在父组件）
+  useEffect(() => {
+    if (idx !== lastReportedRef.current) {
+      lastReportedRef.current = idx;
+      onProgress(idx + 1, pages.length);
+    }
+  }, [idx, pages.length, onProgress]);
+
+  const navigate = useCallback(
+    (dir: 'prev' | 'next') => {
+      setIdx((i) =>
+        dir === 'next' ? Math.min(pages.length - 1, i + 1) : Math.max(0, i - 1),
+      );
+    },
+    [pages.length],
   );
 
+  /** 横滑判定：与 Web EpubViewer 逐字一致 —— (dx > 0) === (方向为 left-next) 即下一页 */
+  function onSwipeEnd(e: PanGestureHandlerStateChangeEvent) {
+    if (e.nativeEvent.state !== State.END) return;
+    const dx = e.nativeEvent.translationX;
+    if (Math.abs(dx) > 50) {
+      const isNext = (dx > 0) === (prefs.swipeDirection === 'left-next');
+      navigate(isNext ? 'next' : 'prev');
+    }
+  }
+
   return (
-    <ScrollView
-      horizontal
-      pagingEnabled
-      ref={(node) => {
-        if (node && displayIndex > 0 && !restored.current) {
-          restored.current = true;
-          requestAnimationFrame(() => {
-            node.scrollTo({ x: displayIndex * Dimensions.get('window').width, animated: false });
-          });
-        }
-      }}
-      scrollEventThrottle={100}
-      onScroll={(e: any) => {
-        const idx = Math.round(e.nativeEvent.contentOffset.x / Dimensions.get('window').width);
-        const logicalPage = prefs.swipeDirection === 'right-next' ? pages.length - idx : idx + 1;
-        onProgress(Math.max(1, Math.min(logicalPage, pages.length)), pages.length);
-      }}
-    >
-      {ordered.map((chunk, i) => (
-        <TouchableOpacity
-          key={i}
-          activeOpacity={1}
+    <View style={{ flex: 1 }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      {prefs.pageMode === 'tap' ? (
+        // 点击翻页：整页可点，左右半区由 shared.tapZoneAction 统一判定
+        <Pressable
+          style={{ flex: 1, padding: margin }}
           onPress={(e) => {
-            // 点击分区与 Web 端一致：左右两半（shared.tapZoneAction）
-            const { width: w } = Dimensions.get('window');
-            const dir = tapZoneAction(
+            if (width <= 0) return;
+            const action = tapZoneAction(
               e.nativeEvent.locationX,
-              w,
+              width,
               prefs.swipeDirection,
             );
-            const target = dir === 'next' ? i + 1 : i - 1;
-            if (target >= 0 && target < pages.length) {
-              scrollRef.current?.scrollTo({
-                x: target * Dimensions.get('window').width,
-                animated: true,
-              });
-            }
-          }}
-          style={{
-            width: Dimensions.get('window').width,
-            padding: margin,
+            navigate(action);
           }}
         >
-          <Text style={textStyle}>{chunk}</Text>
+          <Text style={[textStyle, { maxWidth: 720, width: '100%' }]}>
+            {pages[idx]}
+          </Text>
           <Text
             style={{
               position: 'absolute',
@@ -755,10 +735,36 @@ function TxtPane({
               fontSize: 11,
             }}
           >
-            {i + 1}/{pages.length}
+            {idx + 1}/{pages.length}
           </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+        </Pressable>
+      ) : (
+        // 左右滑动：PanGestureHandler 判定 dx>50（横滑优先，竖滑不拦截）
+        <PanGestureHandler
+          onHandlerStateChange={onSwipeEnd}
+          activeOffsetX={[-12, 12]}
+          failOffsetY={[-16, 16]}
+        >
+          <View style={{ flex: 1, padding: margin }}>
+            <Text style={[textStyle, { maxWidth: 720, width: '100%' }]}>
+              {pages[idx]}
+            </Text>
+            <Text
+              style={{
+                position: 'absolute',
+                bottom: 12,
+                right: 18,
+                color: '#8a8072',
+                fontSize: 11,
+              }}
+            >
+              {idx + 1}/{pages.length}
+            </Text>
+          </View>
+        </PanGestureHandler>
+      )}
+    </View>
   );
 }
+
+// 上下滚动式的“页变化才报”守卫已并入 TxtPane 组件内 ref（lastTxtPageRef）
