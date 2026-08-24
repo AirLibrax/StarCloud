@@ -408,12 +408,24 @@ export default function EpubViewer({
     rendition.display(cfi ?? undefined);
   }
 
-  /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置 */
+  /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置。
+   *  桌面（非触屏）选滑动翻页时自动降级为上下无缝滚动（滚轮阅读），
+   *  左右/上下轴向等子选项是触屏专属。 */
   function changePageMode(mode: PageMode) {
     if (mode === pageMode || !ready) return;
     setPageMode(mode);
     pageModeRef.current = mode;
     localStorage.setItem(MODE_KEY, mode);
+
+    if (mode === 'swipe' && !isTouch) {
+      swipeLayoutRef.current = 'vertical';
+      setSwipeLayout('vertical');
+      localStorage.setItem(LAYOUT_KEY, 'vertical');
+      verticalStyleRef.current = 'continuous';
+      setVerticalStyle('continuous');
+      localStorage.setItem(VSTYLE_KEY, 'continuous');
+    }
+
     setRebuildTick((t) => t + 1);
   }
 
