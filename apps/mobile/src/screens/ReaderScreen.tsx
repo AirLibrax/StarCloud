@@ -18,7 +18,7 @@ import {
   type ReadingPrefs,
 } from '../storage/reading-prefs';
 
-import { buildOfflineEpubHtml, updateOfflineEpubStyle } from '../reader/offline-epub';
+import { buildOfflineEpubHtml } from '../reader/offline-epub';
 
  type Route = RouteProp<RootStackParamList, 'Reader'>;
 
@@ -377,23 +377,22 @@ function EpubPane({
   prefs: { fontStep: number; lineHeightIdx: number };
   onProgress: (page: number, total: number) => void;
 }) {
-  const [htmlUri, setHtmlUri] = useState<string | null>(null);
+  const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reloadTick, setReloadTick] = useState(0);
 
-  // 组装自包含阅读页 HTML
+  // 组装自包含阅读页 HTML（引擎与书全部内联，WebView 直接加载）
   useEffect(() => {
     let cancelled = false;
-    setHtmlUri(null);
+    setHtml(null);
     (async () => {
       try {
-        const uri = await buildOfflineEpubHtml(bookKey, {
+        const h = await buildOfflineEpubHtml(bookKey, {
           fileUri,
           initialPercentage,
           fontSizePct: FONT_STEPS[prefs.fontStep],
           lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
         });
-        if (!cancelled) setHtmlUri(uri);
+        if (!cancelled) setHtml(h);
       } catch (err) {
         if (!cancelled)
           setError(err instanceof Error ? err.message : String(err));
@@ -405,23 +404,32 @@ function EpubPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookKey, fileUri]);
 
-  // 排版变化：更新样式并重载 WebView
+  // 排版变化：重建阅读页
   const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}`;
   const firstStyle = useRef(true);
   useEffect(() => {
-    if (firstStyle.current) {
+    if (firstStyle.current || !html) {
       firstStyle.current = false;
       return;
     }
-    updateOfflineEpubStyle(
-      bookKey,
-      FONT_STEPS[prefs.fontStep],
-      LINE_HEIGHTS[prefs.lineHeightIdx],
-    )
-      .then(() => setReloadTick((t) => t + 1))
-      .catch(() => {});
+    buildOfflineEpubHtml(bookKey, {
+      fileUri,
+      initialPercentage,
+      fontSizePct: FONT_STEPS[prefs.fontStep],
+      lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
+    }).then((h) => {
+      if (!cancelledRef.current) setHtml(h);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [styleKey]);
+
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [bookKey]);
 
   function onMessage(e: any) {
     try {
@@ -440,7 +448,7 @@ function EpubPane({
       </View>
     );
 
-  if (!htmlUri)
+  if (!html)
     return (
       <View style={{ flex: 1, alignItems: 'center', paddingTop: 60 }}>
         <Text style={{ color: '#6b6158' }}>正在准备渲染引擎…</Text>
@@ -449,8 +457,7 @@ function EpubPane({
 
   return (
     <WebView
-      key={reloadTick}
-      source={{ uri: htmlUri }}
+      source={{ html }}
       onMessage={onMessage}
       originWhitelist={['*']}
       javaScriptEnabled

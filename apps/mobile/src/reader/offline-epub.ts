@@ -53,13 +53,17 @@ export async function buildOfflineEpubHtml(
   const safeJszip = jszip.replace(/<\/script>/gi, '<\\/script>');
   const safeEpub = epub.replace(/<\/script>/gi, '<\\/script>');
 
-  const html = `<!doctype html><html><head><meta charset="utf-8" />
+  return `<!doctype html><html><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <style>body{margin:0;background:#fbf7ee}#viewer{width:100vw;height:100vh}</style>
 </head><body><div id="viewer"></div>
 <script>${safeJszip}</script>
 <script>${safeEpub}</script>
 <script>
+window.onerror = function(msg, src, line) {
+  window.ReactNativeWebView.postMessage(JSON.stringify({ t: "error", message: msg + " @" + line }));
+  return false;
+};
 window.__bookDataUri = "data:application/epub+zip;base64,${base64}";
 window.__initialPct = ${opts.initialPercentage};
 window.__fontPct = ${opts.fontSizePct};
@@ -99,28 +103,12 @@ try {
   window.ReactNativeWebView.postMessage(JSON.stringify({ t: "error", message: String(err && err.message || err) }));
 }
 })();</script></body></html>`;
-
-  const dir = `${FileSystem.cacheDirectory}epub-reader/`;
-  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  const path = `${dir}${bookId}.html`;
-  await FileSystem.writeAsStringAsync(path, html, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
-  return path;
 }
 
-/** 排版变化时更新已生成的阅读页（WebView 需重新加载生效） */
-export async function updateOfflineEpubStyle(
-  bookId: string,
-  fontSizePct: number,
-  lineHeight: number,
-): Promise<void> {
-  const path = `${FileSystem.cacheDirectory}epub-reader/${bookId}.html`;
-  let html = await FileSystem.readAsStringAsync(path);
-  html = html
-    .replace(/window\.__fontPct = [\d.]+;/, `window.__fontPct = ${fontSizePct};`)
-    .replace(/window\.__lineHeight = [\d.]+;/, `window.__lineHeight = ${lineHeight};`);
-  await FileSystem.writeAsStringAsync(path, html, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+/** 排版变化时返回新的完整阅读页（WebView 重新加载生效） */
+export async function buildOfflineEpubHtmlRestyled(
+  bookKey: string,
+  opts: OfflineReaderOptions,
+): Promise<string> {
+  return buildOfflineEpubHtml(bookKey, opts);
 }
