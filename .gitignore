@@ -10,6 +10,9 @@ build/
 .env
 .env.local
 
+# 管理员种子凭据（模板 admins.example.json 入库，实际凭据不入库）
+apps/server/prisma/admins.json
+
 # 数据库与上传文件
 *.db
 *.db-journal
