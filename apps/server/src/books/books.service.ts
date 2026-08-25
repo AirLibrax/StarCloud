@@ -33,10 +33,11 @@ function resolveFileType(
   const byMime = ALLOWED_TYPES[mimetype];
   if (byMime) return byMime;
 
-  if (mimetype === 'application/octet-stream' || mimetype === '') {
-    return EXT_FALLBACK[extname(filename).toLowerCase()] ?? null;
-  }
-  return null;
+  // 任何未被白名单识别的 mimetype 都按扩展名兜底：
+  // 浏览器/系统对 .epub 的标注五花八门（application/epub+zip、
+  // application/epub、application/octet-stream、空字符串……），
+  // 统一以文件扩展名做最终裁决，扩展名也是白名单内才放行
+  return EXT_FALLBACK[extname(filename).toLowerCase()] ?? null;
 }
 
 const CONTENT_TYPE: Record<BookFileType, string> = {
