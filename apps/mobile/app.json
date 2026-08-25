@@ -1,16 +1,11 @@
 {
   "expo": {
-    "name": "星辰云图书馆",
+    "name": "StarCloud",
     "slug": "starcloud",
     "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/images/icon.png",
-    "splash": {
-      "image": "./assets/images/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FBEFE0"
-    },
     "android": {
       "package": "com.airlibrax.starcloud",
       "versionCode": 2,
@@ -22,7 +17,16 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FBEFE0",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ]
     ],
     "extra": {
       "eas": {
