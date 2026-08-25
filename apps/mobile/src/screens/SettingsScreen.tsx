@@ -142,6 +142,23 @@ export default function SettingsScreen() {
               {busy ? '连接中…' : '保存并登录'}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('Register', {
+                serverUrl: serverUrl.trim() || undefined,
+              })
+            }
+            style={{
+              marginTop: 10,
+              borderWidth: 1,
+              borderColor: colors.accent,
+              borderRadius: 6,
+              paddingVertical: 12,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: colors.accent, fontSize: 15 }}>注册</Text>
+          </TouchableOpacity>
         </>
       )}
 

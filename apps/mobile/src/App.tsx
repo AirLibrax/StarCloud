@@ -9,6 +9,7 @@ import LibraryScreen from './screens/LibraryScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ReaderScreen from './screens/ReaderScreen';
 import LoginScreen from './screens/LoginScreen';
+import RegisterScreen from './screens/RegisterScreen';
 import { loadReadingPrefs } from './storage/reading-prefs';
 import { loadSettingsCache } from './storage/settings';
 
@@ -16,6 +17,8 @@ export type RootStackParamList = {
   Library: undefined;
   Settings: undefined;
   Login: undefined;
+  /** 云端自助注册（serverUrl 可选：注册页优先用它，缺省回退已保存地址） */
+  Register: { serverUrl?: string } | undefined;
   /** source: cloud 用 bookId，local 用 localId */
   Reader: {
     title: string;
@@ -52,6 +55,7 @@ export default function App() {
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Reader" component={ReaderScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

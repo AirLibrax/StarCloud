@@ -91,6 +91,23 @@ export default function LoginScreen() {
       >
         <Text style={{ color: colors.text, fontSize: 15 }}>{busy ? '登录中…' : '登录'}</Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() =>
+          navigation.navigate('Register', {
+            serverUrl: getSettings().serverUrl || undefined,
+          })
+        }
+        style={{
+          marginTop: 10,
+          borderWidth: 1,
+          borderColor: colors.accent,
+          borderRadius: 6,
+          paddingVertical: 12,
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{ color: colors.accent, fontSize: 15 }}>注册</Text>
+      </TouchableOpacity>
     </View>
   );
 }
