@@ -324,8 +324,9 @@ input:focus {
   border-color: var(--accent);
   color: #fffdf7;
 }
-/* 窄屏强制单列：单/双列切换按钮仅在视口 >900px（平板横屏/桌面）时显示 */
-@media (max-width: 900px) {
+/* 窄屏/竖屏强制单列：单/双列切换按钮仅在 ≥768px 横向视口（平板横屏/桌面）时显示，
+   与 EpubViewer 的 WIDE_SPREAD_MQ 门槛一致 */
+@media (max-width: 767px), (orientation: portrait) {
   .spread-btn {
     display: none;
   }

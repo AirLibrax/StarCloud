@@ -31,8 +31,10 @@ const LAYOUT_KEY = 'starcloud.swipeLayout';
 const VSTYLE_KEY = 'starcloud.verticalStyle';
 const DIR_KEY = 'starcloud.swipeDirection';
 const SPREAD_KEY = 'starcloud.spreadTwoUp';
-/** 双列排版生效的最小视口宽度：仅平板横屏/桌面（>900px）允许双列 */
-const SPREAD_MIN_WIDTH = 900;
+/** 双列排版生效的视口门槛：≥768px 且横向占优（平板横屏/桌面）。
+ *  原 900px 门槛对真实平板过高：1280x800@DPR1.6 等安卓平板横屏 CSS 视口仅 ~800px、
+ *  竖屏 ~700px，横屏也永不达标，旋转无任何排版变化 */
+const WIDE_SPREAD_MQ = '(min-width: 768px) and (orientation: landscape)';
 /** 滑动手势触发阈值（px），与 App 端一致 */
 const SWIPE_THRESHOLD = 50;
 
@@ -158,8 +160,8 @@ export default function EpubViewer({
   });
   const [swipeDir, setSwipeDir] = useState<SwipeDirection>(readDirection);
   const [twoUpPref, setTwoUpPref] = useState(readSpreadTwoUpPref);
-  /** 视口宽度是否达到双列门槛（>900px：平板横屏/桌面） */
-  const [isWide, setIsWide] = useState(() => window.innerWidth > SPREAD_MIN_WIDTH);
+  /** 视口是否达到双列门槛（≥768px 且横向占优：平板横屏/桌面） */
+  const [isWide, setIsWide] = useState(() => window.matchMedia(WIDE_SPREAD_MQ).matches);
 
   /** 结构性变化时 +1：触发渲染器整体重建 */
   const [rebuildTick, setRebuildTick] = useState(0);
@@ -433,10 +435,10 @@ export default function EpubViewer({
 
   /* ---- 视口宽度跟踪：双列门槛与容器重排（规格四） ---- */
 
-  // 窗口 resize / 横竖屏切换时刷新「视口是否够宽」
+  // 窗口 resize / 横竖屏切换时刷新「视口是否达标」（媒查询同源覆盖宽度与横向占优）
   useEffect(() => {
-    const mq = window.matchMedia('(orientation: landscape)');
-    const updateWide = () => setIsWide(window.innerWidth > SPREAD_MIN_WIDTH);
+    const mq = window.matchMedia(WIDE_SPREAD_MQ);
+    const updateWide = () => setIsWide(mq.matches);
     updateWide();
     window.addEventListener('resize', updateWide);
     mq.addEventListener('change', updateWide);
@@ -446,17 +448,22 @@ export default function EpubViewer({
     };
   }, []);
 
-  /** 视口跨过双列门槛：切换 spread 并按当前位置重排（防截断） */
+  /** 视口跨过双列门槛：切换 spread 并按当前位置重排（防截断）；
+   *  门槛未变（双列偏好关/竖向滚动）也强制 resize 一次，保证旋转后按新宽度重新分页 */
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!readyRef.current || !rendition) return;
     // twoUpRef 已含全部规则（偏好 ∩ 视口宽度 ∩ 桌面滑动强制单列）
     const nextSpread = twoUpRef.current ? 'always' : 'none';
-    if (rendition.settings?.spread === nextSpread) return;
-    const cfi = currentCfi(rendition, lastSpineIdxRef.current);
-    rendition.spread(nextSpread);
-    rendition.clear();
-    rendition.display(cfi ?? undefined);
+    if (rendition.settings?.spread !== nextSpread) {
+      const cfi = currentCfi(rendition, lastSpineIdxRef.current);
+      rendition.spread(nextSpread);
+      rendition.clear();
+      rendition.display(cfi ?? undefined);
+      return;
+    }
+    // 单列/竖向模式旋转后同样按新视口宽度重新分页（引擎 resize 链的全宽重排）
+    rendition.resize?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWide]);
 
