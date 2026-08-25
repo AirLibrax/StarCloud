@@ -67,7 +67,7 @@ function normalize(v: any): any[] {
   return Array.isArray(v) ? v : [v];
 }
 
-export function parseEpubMeta(zipBuffer: Buffer, fallbackFilename: string): EpubMeta {
+export function parseEpubMeta(zipBuffer: Buffer): EpubMeta {
   const result: EpubMeta = { title: null, author: null, coverBinary: null, coverExt: null };
 
   let zip: AdmZip;
@@ -161,10 +161,10 @@ function cnToNumber(s: string): number | null {
  * 支持常见命名：「XX 第01卷」「XX 卷2」「XX 03」「XX Vol.2」「XX (3)」「第X巻」等。
  */
 export function splitTitleVolume(raw: string): { title: string; volume: number | null } {
-  let s = raw.replace(/\.(epub|pdf|txt)$/i, '').trim();
+  const s = raw.replace(/\.(epub|pdf|txt)$/i, '').trim();
 
   const patterns: RegExp[] = [
-    /\s*[(\[【]\s*(?:vol\.?|volume)?\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)\s*[)】\]]\s*/i,
+    /\s*[(【]\s*(?:vol\.?|volume)?\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)\s*[)】\]]\s*/i,
     /\s+(?:vol\.?|volume)\s*(\d+(?:\.\d+)?)\s*/i,
     /\s*第\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)\s*[卷話话巻册]\s*/,
     /\s+[卷巻]\s*(\d+(?:\.\d+)?)\s*/i,

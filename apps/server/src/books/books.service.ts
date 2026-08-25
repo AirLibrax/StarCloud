@@ -96,7 +96,7 @@ export class BooksService {
 
     if (fileType === 'epub') {
       try {
-        const meta = parseEpubMeta(readFileSync(file.path), file.originalname);
+        const meta = parseEpubMeta(readFileSync(file.path));
         if (!title && meta.title) title = meta.title;
         if (!author && meta.author) author = meta.author;
 

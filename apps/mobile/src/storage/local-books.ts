@@ -40,9 +40,9 @@ function extOf(nameOrUri: string): string {
 
 /** 从文件名/标题识别卷数（同服务端 splitTitleVolume 的简化版：仅阿拉伯数字） */
 export function splitTitleVolume(raw: string): { title: string; volume: number | null } {
-  let s = raw.replace(/\.(epub|pdf|txt)$/i, '').trim();
+  const s = raw.replace(/\.(epub|pdf|txt)$/i, '').trim();
   const patterns: RegExp[] = [
-    /\s*[(\[【]\s*(\d{1,4})\s*[)】\]]\s*/,
+    /\s*[(【]\s*(\d{1,4})\s*[)】\]]\s*/,
     /\s+(?:vol\.?|volume)\s*(\d{1,4})\s*/i,
     /\s*第\s*(\d{1,4})\s*[卷話话巻册]\s*/,
     /\s+[卷巻]\s*(\d{1,4})\s*/i,

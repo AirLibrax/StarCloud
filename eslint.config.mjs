@@ -13,6 +13,7 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   {
@@ -41,6 +42,10 @@ export default tseslint.config(
         ...globals.node,
       },
     },
+    rules: {
+      // CJS 配置文件（metro.config.js 等）的 require 属正常用法，与 TS 侧一致降 warn
+      '@typescript-eslint/no-require-imports': 'warn',
+    },
   },
   {
     files: ['**/*.{ts,tsx}'],
@@ -49,6 +54,9 @@ export default tseslint.config(
         ...globals.browser,
         ...globals.node,
       },
+    },
+    plugins: {
+      'react-hooks': reactHooks,
     },
     rules: {
       // ---- 死代码拦截（本配置的核心目标） ----
@@ -64,6 +72,11 @@ export default tseslint.config(
       // ---- 历史噪音规则：初始 warn，待实跑统计后复核 ----
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-require-imports': 'warn',
+
+      // ---- React Hooks ----
+      // 只启用 exhaustive-deps（warn）：匹配代码中已有的 disable 注释；
+      // 不整套启用 v7 recommended（含 15 个新规则，会洪泛新报错）
+      'react-hooks/exhaustive-deps': 'warn',
 
       // ---- 与现有代码风格对齐的放宽 ----
       // React 19 + react-jsx 无需显式导入 React

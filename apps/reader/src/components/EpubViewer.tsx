@@ -197,7 +197,8 @@ export default function EpubViewer({
     const now = Date.now();
     if (now - lastNavAtRef.current < 400) return;
     lastNavAtRef.current = now;
-    dir === 'prev' ? goPrev() : goNext();
+    if (dir === 'prev') goPrev();
+    else goNext();
   }
   const navigateCooldownRef = useRef(navigateWithCooldown);
   navigateCooldownRef.current = navigateWithCooldown;
@@ -459,7 +460,6 @@ export default function EpubViewer({
     }
     // 单列/竖向模式旋转后同样按新视口宽度重新分页（引擎 resize 链的全宽重排）
     rendition.resize?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWide]);
 
   /** 容器尺寸变化 → rendition.resize() 重排（引擎自带 window resize 监听，此处兜底容器级变化） */
@@ -580,7 +580,8 @@ export default function EpubViewer({
       rect.width,
       swipeDirRef.current,
     );
-    action === 'next' ? goNext() : goPrev();
+    if (action === 'next') goNext();
+    else goPrev();
   }
 
   /* ---- 滑动翻页手势（swipe+horizontal / swipe+vertical+paged）：
@@ -619,11 +620,15 @@ export default function EpubViewer({
     if (swipeLayoutRef.current === 'horizontal') {
       if (mainVertical) {
         // 纵向手势恒定，不随方向偏好镜像（规格二）
-        if (Math.abs(dy) > SWIPE_THRESHOLD) (dy < 0 ? goNext() : goPrev());
+        if (Math.abs(dy) > SWIPE_THRESHOLD) {
+          if (dy < 0) goNext();
+          else goPrev();
+        }
       } else if (Math.abs(dx) > SWIPE_THRESHOLD) {
         // 规格二：isNext = (dx > 0) === (方向为 left-next)
         const isNext = (dx > 0) === (swipeDirRef.current === 'left-next');
-        isNext ? goNext() : goPrev();
+        if (isNext) goNext();
+        else goPrev();
       }
       return;
     }
@@ -634,7 +639,8 @@ export default function EpubViewer({
     ) {
       // 单页翻动主手势：纵向位移判定（主轴），横向位移忽略
       if (mainVertical && Math.abs(dy) > SWIPE_THRESHOLD) {
-        (dy < 0 ? goNext() : goPrev());
+        if (dy < 0) goNext();
+        else goPrev();
       }
     }
     // vertical + continuous：引擎原生滚动，无手势处理

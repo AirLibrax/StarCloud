@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateBookDto {
   /** 可留空：EPUB 会从内嵌元数据/文件名自动识别 */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../App';
-import type { CloudShelfItem, ApiError } from '../api/client';
+import type { CloudShelfItem } from '../api/client';
 import { fetchShelf, fileUrl } from '../api/client';
 import {
   listLocalBooks,
