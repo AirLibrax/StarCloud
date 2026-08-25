@@ -33,8 +33,11 @@ const DIR_KEY = 'starcloud.swipeDirection';
 const SPREAD_KEY = 'starcloud.spreadTwoUp';
 /** 双列排版生效的视口门槛：≥768px 且横向占优（平板横屏/桌面）。
  *  原 900px 门槛对真实平板过高：1280x800@DPR1.6 等安卓平板横屏 CSS 视口仅 ~800px、
- *  竖屏 ~700px，横屏也永不达标，旋转无任何排版变化 */
-const WIDE_SPREAD_MQ = '(min-width: 768px) and (orientation: landscape)';
+ *  竖屏 ~700px，横屏也永不达标，旋转无任何排版变化。
+ *  数值同时传给 epubjs 的 minSpreadWidth：引擎内部 divisor=2 的判定阈值必须
+ *  与 UI 门槛一致，否则 768-799px 横屏会显示「双列」却渲染单列（死按钮） */
+const SPREAD_MIN_WIDTH = 768;
+const WIDE_SPREAD_MQ = `(min-width: ${SPREAD_MIN_WIDTH}px) and (orientation: landscape)`;
 /** 滑动手势触发阈值（px），与 App 端一致 */
 const SWIPE_THRESHOLD = 50;
 
@@ -79,19 +82,6 @@ function modeLabel(m: PageMode): string {
   return m === 'tap' ? '点击翻页' : '滑动翻页';
 }
 
-/** 取当前渲染器的位置 CFI（default manager 同步返回；取不到回退章节序号） */
-function currentCfi(rendition: any, fallbackIdx: number | null): string | undefined {
-  try {
-    const loc = rendition.currentLocation();
-    const cfi = loc?.start?.cfi;
-    if (typeof cfi === 'string' && cfi.length > 0) return cfi;
-  } catch {
-    // 尚无位置信息
-  }
-  // 无 CFI 时回退到会话内章节序号，避免 display(undefined) 跳回书首
-  return fallbackIdx != null ? String(fallbackIdx) : undefined;
-}
-
 /**
  * EPUB 渲染器（实现 docs/reader-interaction.md 冻结规格）。
  *
@@ -109,8 +99,8 @@ function currentCfi(rendition: any, fallbackIdx: number | null): string | undefi
  *     axis='vertical'，书页 pe:none，外层容器纵向位移判定（上推/下拉翻页）；
  *   · 桌面（非触屏）：固定上下无缝滚动（同一连续渲染），强制单列，
  *     工具栏单/双列按钮禁用显示 ∅（滚动样式固定 continuous，无子选项）。
- * 单列/双列：视口 >900px（平板横屏/桌面）且用户开启双列偏好且非
- * 桌面滑动模式时 spread='always'，其余一律 'none'；
+ * 单列/双列：视口 ≥768px 且横向占优（平板横屏/桌面）且用户开启双列偏好
+ * 且非桌面滑动/上下滑动模式时 spread='always'，其余一律 'none'；
  * 视口跨过门槛自动重排防截断，窄屏隐藏切换按钮。
  *
  * 结构性变化（pageMode/swipeLayout/spread）通过 rebuildTick 整体重建
@@ -163,6 +153,8 @@ export default function EpubViewer({
   const [twoUpPref, setTwoUpPref] = useState(readSpreadTwoUpPref);
   /** 视口是否达到双列门槛（≥768px 且横向占优：平板横屏/桌面） */
   const [isWide, setIsWide] = useState(() => window.matchMedia(WIDE_SPREAD_MQ).matches);
+  /** 单双列切换进行中：按钮置灰防连点（spread 重排为同步操作，此状态作为防御） */
+  const [spreadSwitching, setSpreadSwitching] = useState(false);
 
   /** 结构性变化时 +1：触发渲染器整体重建 */
   const [rebuildTick, setRebuildTick] = useState(0);
@@ -321,6 +313,8 @@ export default function EpubViewer({
           // 官方类型声明缺失，此处按规格断言注入
           ...(isVerticalPaged ? ({ axis: 'vertical' } as any) : {}),
           spread: isVerticalScroll ? 'none' : twoUpRef.current ? 'always' : 'none',
+          // 引擎内部双列判定阈值与 UI 门槛（SPREAD_MIN_WIDTH）保持一致
+          minSpreadWidth: SPREAD_MIN_WIDTH,
         });
         renditionRef.current = localRendition;
         localRendition.themes.register('paper', {
@@ -449,18 +443,17 @@ export default function EpubViewer({
     };
   }, []);
 
-  /** 视口跨过双列门槛：切换 spread 并按当前位置重排（防截断）；
-   *  门槛未变（双列偏好关/竖向滚动）也强制 resize 一次，保证旋转后按新宽度重新分页 */
+  /** 视口跨过双列门槛：切换 spread（引擎原地重排，防截断）；
+   *  门槛未变（双列偏好关/竖向滚动）也强制 resize 一次，保证旋转后按新宽度重新分页。
+   *  不再手动 clear()+display()：spread() 内部已触发完整重排，清空重建由引擎
+   *  自己的 window resize 链完成（manager.resize → RESIZED → display 恢复位置） */
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!readyRef.current || !rendition) return;
     // twoUpRef 已含全部规则（偏好 ∩ 视口宽度 ∩ 桌面滑动强制单列）
     const nextSpread = twoUpRef.current ? 'always' : 'none';
     if (rendition.settings?.spread !== nextSpread) {
-      const cfi = currentCfi(rendition, lastSpineIdxRef.current);
-      rendition.spread(nextSpread);
-      rendition.clear();
-      rendition.display(cfi ?? undefined);
+      rendition.spread(nextSpread, SPREAD_MIN_WIDTH);
       return;
     }
     // 单列/竖向模式旋转后同样按新视口宽度重新分页（引擎 resize 链的全宽重排）
@@ -510,9 +503,11 @@ export default function EpubViewer({
   const applyDocHandlersRef = useRef(applyDocHandlers);
   applyDocHandlersRef.current = applyDocHandlers;
 
-  /** 切换单列/双列偏好；窄屏（未达双列门槛）只改偏好，不应用 */
+  /** 切换单列/双列偏好；窄屏（未达双列门槛）只改偏好，不应用；
+   *  上下滑动轴向固定单列（同桌面滑动），此状态下禁止切换与写盘 */
   function toggleSpread() {
     if (!ready || desktopSwipe) return;
+    if (swipeLayoutRef.current === 'vertical') return;
     const next = !twoUpPref;
     setTwoUpPref(next);
     localStorage.setItem(SPREAD_KEY, next ? 'two-up' : 'single');
@@ -520,10 +515,14 @@ export default function EpubViewer({
 
     const rendition = renditionRef.current;
     if (!rendition) return;
-    const cfi = currentCfi(rendition, lastSpineIdxRef.current);
-    rendition.spread(next ? 'always' : 'none');
-    rendition.clear();
-    rendition.display(cfi ?? undefined);
+    // rendition.spread() 内部已完成重排（layout.spread → manager.updateLayout →
+    // 各 view setLayout → format+expand 原地重排），无需手动 clear()+display() 重建
+    setSpreadSwitching(true);
+    try {
+      rendition.spread(next ? 'always' : 'none', SPREAD_MIN_WIDTH);
+    } finally {
+      setSpreadSwitching(false);
+    }
   }
 
   /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置。
@@ -666,15 +665,23 @@ export default function EpubViewer({
                 : '')}
         </span>
         <div className="toolbar-right">
-          {/* 单列/双列排版切换：仅视口 >900px 显示；桌面滑动模式禁用显示 ∅ */}
+          {/* 单列/双列排版切换：仅达标横屏显示；桌面滑动与上下滑动模式禁用显示 ∅ */}
           {isWide && (
             <button
               className="btn spread-btn"
               onClick={toggleSpread}
-              disabled={!ready || desktopSwipe}
-              title={desktopSwipe ? '桌面滑动翻页固定为上下连续滚动，强制单列' : '单列/双列排版'}
+              disabled={!ready || desktopSwipe || swipeLayout === 'vertical' || spreadSwitching}
+              title={
+                desktopSwipe
+                  ? '桌面滑动翻页固定为上下连续滚动，强制单列'
+                  : swipeLayout === 'vertical'
+                    ? '上下滑动模式为单列排版'
+                    : spreadSwitching
+                      ? '切换中…'
+                      : '单列/双列排版'
+              }
             >
-              {desktopSwipe ? '∅' : twoUp ? '双列' : '单列'}
+              {desktopSwipe || swipeLayout === 'vertical' ? '∅' : twoUp ? '双列' : '单列'}
             </button>
           )}
           <button
