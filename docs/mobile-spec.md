@@ -44,9 +44,9 @@
 - 字号：8 档（80% – 180%）
 - 行间距：4 档（1.4 / 1.6 / 1.8 / 2.0 倍）
 - 左右页边距：4 档（窄 / 中 / 宽 / 很宽）
-- 单列 / 双列二选一 —— **待办**：App 暂未实现双列排版（Web 端
-  仅视口 ≥768px 且横向占优时生效，门槛同 docs/reader-interaction.md 第四节），
-  偏好键与 Web 对应持久化
+- 单列 / 双列二选一：平板横屏（≥768px 且横向占优）时支持双列排版，
+  与 Web 端门槛一致（docs/reader-interaction.md 第四节），旋转跨门槛实时重排；
+  上下滑动轴向固定单列；偏好键与 Web 对应持久化
 - 所有设置持久化到本地（AsyncStorage 键名与 Web localStorage 的
   `starcloud.*` 系列一一对应，见 docs/reader-interaction.md 第六节）
 
