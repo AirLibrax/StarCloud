@@ -5,8 +5,20 @@
     "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FBEFE0"
+    },
     "android": {
-      "package": "com.airlibrax.starcloud"
+      "package": "com.airlibrax.starcloud",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
+        "backgroundColor": "#FBEFE0"
+      }
     },
     "plugins": [
       "expo-asset",
