@@ -11,6 +11,12 @@
     "plugins": [
       "expo-asset",
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "756cef65-bd17-4764-bf4a-e516405c27c3"
+      }
+    },
+    "owner": "airlibrax"
   }
 }

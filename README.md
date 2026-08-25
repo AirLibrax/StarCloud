@@ -11,7 +11,7 @@
 | `apps/server` 后端 API | ✅ 完成 | 认证 / 书籍 / 进度 / 用户管理，SQLite 单文件存储 |
 | `apps/admin` 管理后台 | ✅ 完成 | 登录、书籍上传（PDF / EPUB / TXT）、列表、删除、读者数 |
 | `apps/reader` Web 阅读端 | ✅ 完成 | TXT / PDF / EPUB 三格式；阅读交互体系已按冻结规格实现（见 [docs/reader-interaction.md](docs/reader-interaction.md)） |
-| `apps/mobile` 安卓 App | 🔶 可用（第一版） | Expo + RN；本地导入 + 云端书架 + 离线 EPUB/TXT；交互已对齐 shared 模型（见 [docs/mobile-spec.md](docs/mobile-spec.md)）；待办：PDF 离线、双列排版、真机手感打磨 |
+| `apps/mobile` 安卓 App | ✅ 完成（第一版） | Expo + RN；本地导入 + 云端书架 + 离线 EPUB/TXT；交互已对齐 shared 模型（见 [docs/mobile-spec.md](docs/mobile-spec.md)）；平板横屏双列排版已支持；待办：PDF 离线 |
 | 部署配置 | ⏳ 暂未完成 | 生产部署脚本与 HTTPS 配置待补充 |
 
 ## 架构
@@ -44,12 +44,12 @@ StarCloud/
 │   │   └── TXT:  滚动式阅读，滚动位置换算进度
 │   │   交互规格（翻页方式/轴向/方向/双列）见 docs/reader-interaction.md
 │   │
-│   └── mobile/          🔶 安卓 App（Expo + RN），第一版可用：
+│   └── mobile/          ✅ 安卓 App（Expo + RN）：
 │                          双书源（本地导入 + 云端书架）、零多余权限、
 │                          离线 EPUB（WebView 内嵌 epubjs + base64 分块推送）、
 │                          TXT 原生渲染；阅读交互与 Web 端共享同一套
-│                          @starcloud/shared 模型（见 docs/mobile-spec.md）。
-│                          待办：PDF 离线、双列排版、真机手感打磨
+│                          @starcloud/shared 模型（见 docs/mobile-spec.md）；
+│                          平板横屏双列排版已支持。待办：PDF 离线
 │
 ├── packages/
 │   └── shared/          ✅ 三端共用的 TypeScript 类型定义与阅读交互模型
@@ -143,10 +143,10 @@ npm run dev:admin                # 管理后台 http://localhost:5173
 npm run dev:reader               # 阅读端   http://localhost:5174
 ```
 
-安卓 App（需要已安装 dev-client 的模拟器/真机）：
+安卓 App（开发模式，手机安装 Expo Go 后扫码或输入局域网地址即可加载）：
 
 ```bash
-npm run dev:mobile               # expo start --dev-client
+npm run dev:mobile               # expo start --lan
 ```
 
 App 在「设置」页填入服务器地址并登录即可连接云端书架；不配置服务器也能
@@ -199,7 +199,7 @@ App 在「设置」页填入服务器地址并登录即可连接云端书架；�
 
 ## 历史
 
-v1 原型（Express + sqlite3 + 原生 HTML 管理页）封存于 [`legacy`](../../tree/legacy) 分支。
+v1 原型（Express + sqlite3 + 原生 HTML 管理页）已被完全重写为当前的 monorepo 架构。
 
 ## License / 许可证
 

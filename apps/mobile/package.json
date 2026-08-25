@@ -4,7 +4,7 @@
   "private": true,
   "main": "index.tsx",
   "scripts": {
-    "start": "expo start --dev-client",
+    "start": "expo start --lan",
     "android": "expo run:android",
     "typecheck": "tsc --noEmit"
   },
