@@ -1,5 +1,7 @@
 # 星辰云图书馆 StarCloud
 
+> **Language**: [English](README.en.md) | 中文
+
 个人云端图书馆：在服务器上存放书籍，在任何设备的浏览器或手机 App 中阅读，阅读进度跨设备同步。
 
 ![阅读器效果预览](docs/reader-preview.jpg)
@@ -24,6 +26,14 @@
 | `apps/reader` Web 阅读端 | ✅ 完成 | TXT / PDF / EPUB 三格式；交互体系按冻结规格实现（见 [docs/reader-interaction.md](docs/reader-interaction.md)） |
 | `apps/mobile` 安卓 App | ✅ 完成 | Expo + RN；本地导入 + 云端书架 + 离线 EPUB/TXT + 平板横屏双列；待办：PDF 离线 |
 | `deploy/` 生产部署 | ✅ 完成 | Docker + Caddy 一键部署、自动 HTTPS、备份脚本（见 [docs/deploy.md](docs/deploy.md)） |
+
+## 界面预览
+
+| | |
+|---|---|
+| ![书架](docs/screenshots/shelf.png) | ![阅读器（双列 + 排版设置）](docs/screenshots/reader.png) |
+| ![管理后台：书籍管理](docs/screenshots/admin-books.png) | ![管理后台：用户管理](docs/screenshots/admin-users.png) |
+| ![登录页](docs/screenshots/login.png) | |
 
 ## 快速开始
 
@@ -380,9 +390,10 @@ docker compose -f deploy/docker-compose.yml exec starcloud node dist/seed.js  # 
 
 | 文档 | 内容 |
 |------|------|
-| [docs/reader-interaction.md](docs/reader-interaction.md) | 阅读交互冻结规格（三端权威定义） |
-| [docs/mobile-spec.md](docs/mobile-spec.md) | 安卓 App 规格（离线方案、三端对齐） |
-| [docs/deploy.md](docs/deploy.md) | 生产部署全流程 |
+| [docs/reader-interaction.md](docs/reader-interaction.md) · [English](docs/reader-interaction.en.md) | 阅读交互冻结规格（三端权威定义） |
+| [docs/deploy.md](docs/deploy.md) · [English](docs/deploy.en.md) | 生产部署全流程 |
+| [docs/archive/mobile-spec-v1.md](docs/archive/mobile-spec-v1.md) | App 原始需求规格（已归档，功能全部实现） |
+| [README.en.md](README.en.md) | English version |
 
 ## 历史
 
