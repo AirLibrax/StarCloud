@@ -84,15 +84,20 @@
 
 - 设置存储 AsyncStorage，键名与值域和 Web localStorage 对应（见第六节）；
 - 设置面板结构与 Web 一致：三条滑块 + 翻页方式二选一 +
-  条件子项（swipe 显示轴向、tap 或 swipe/horizontal 显示方向）；
+  条件子项（swipe 显示轴向；轴向为上下时再显示滚动样式
+  无缝滚动/单页翻动；tap 或 swipe/horizontal 显示翻页方向）；
+  注：阅读偏好面板在 ReaderScreen 内，非 SettingsScreen；
 - App 是纯触屏设备，不存在桌面降级分支；
 - TXT 渲染（TxtPane）：
   tap = 左右半区 Pressable/tapZoneAction 判定；
-  swipe/horizontal = PanGestureHandler，方向公式同第二节；
-  swipe/vertical = ScrollView 天然无缝滚动；
+  swipe/horizontal = PanGestureHandler，方向公式同第二节，
+  含纵向手势（上推下一页/下拉上一页，恒定不镜像）；
+  swipe/vertical+continuous = ScrollView 天然无缝滚动；
+  swipe/vertical+paged = 纵向 PanGestureHandler 一页一页翻动；
 - EPUB 渲染（offline-epub.ts 内嵌 WebView）：renderOptions 按
-  pageMode/swipeLayout 注入 flow/manager/axis（映射表同 Web EpubViewer），
-  手势经注入 JS 判定后 postMessage 回 RN 执行翻页。
+  pageMode/swipeLayout/verticalStyle 注入 flow/manager/axis
+  （映射表同 Web EpubViewer），手势经注入 JS 判定后
+  postMessage 回 RN 执行翻页；
 
 ## 六、持久化
 
