@@ -838,8 +838,8 @@ function PagedPane({
           </Text>
         </Pressable>
       ) : (
-        // 左右滑动：PanGestureHandler 判定 dx>50（横滑优先，竖滑不拦截）；
-        // 上下单页翻动：判定 dy>50（纵滑优先，横滑不拦截）
+        // 左右滑动：PanGestureHandler 判定 |dx|>SWIPE_THRESHOLD（横滑优先，竖滑不拦截）；
+        // 上下单页翻动：判定 |dy|>SWIPE_THRESHOLD（纵滑优先，横滑不拦截）
         <PanGestureHandler
           onHandlerStateChange={onSwipeEnd}
           activeOffsetX={isVerticalPaged ? undefined : [-12, 12]}

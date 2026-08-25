@@ -38,7 +38,7 @@ function extOf(nameOrUri: string): string {
   return m ? `.${m[1].toLowerCase()}` : '';
 }
 
-/** 从文件名/标题识别卷数（与服务端 splitTitleVolume 同一套规则） */
+/** 从文件名/标题识别卷数（同服务端 splitTitleVolume 的简化版：仅阿拉伯数字） */
 export function splitTitleVolume(raw: string): { title: string; volume: number | null } {
   let s = raw.replace(/\.(epub|pdf|txt)$/i, '').trim();
   const patterns: RegExp[] = [
@@ -118,11 +118,7 @@ export async function ensureCloudBookDownloaded(cloud: {
   return book;
 }
 
-export async function findLocalByCloudId(cloudId: number): Promise<LocalBook | undefined> {
-  return (await listLocalBooks()).find((b) => b.cloudBookId === cloudId);
-}
-
-export async function saveList(books: LocalBook[]): Promise<void> {
+async function saveList(books: LocalBook[]): Promise<void> {
   await AsyncStorage.setItem(LIST_KEY, JSON.stringify(books));
 }
 
