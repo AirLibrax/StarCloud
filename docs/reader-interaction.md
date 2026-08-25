@@ -65,7 +65,7 @@
 ## 三、键盘（PC）
 
 - ↓ = 下一页，↑ = 上一页（恒定，不随方向偏好）；
-- ← → 跟随「翻页方向」偏好（left-next 时 → 为下一页）；
+- ← → 跟随「翻页方向」偏好（left-next 时 ← 为下一页）；
 - keydown 即触发（非 keyup），带 400ms 冷却防连击穿透；
 - 双通道监听：window keydown（焦点在外层）+
   书页 iframe document 的捕获阶段 keydown（焦点在书页内）；

@@ -251,12 +251,13 @@ export default function EpubViewer({
         navigateCooldownRef.current('prev');
         return;
       }
-      // 左右箭头跟随方向偏好（规格三：left-next 时 → 为下一页）：
-      // 与滑动/点击同一镜像模型 —— (按的是右箭头) === (方向为 left-next) 即下一页
+      // 左右箭头跟随方向偏好（规格三：left-next 时 ← 为下一页）：
+      // 键盘跟随屏幕方向直觉，与滑动/点击的镜像模型相反 ——
+      // (按的是左箭头) === (方向为 left-next) 即下一页
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
         const isNext =
-          (e.key === 'ArrowRight') === (swipeDirRef.current === 'left-next');
+          (e.key === 'ArrowLeft') === (swipeDirRef.current === 'left-next');
         navigateCooldownRef.current(isNext ? 'next' : 'prev');
       }
     },
