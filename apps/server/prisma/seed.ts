@@ -20,8 +20,13 @@ interface AdminEntry {
 
 /** 读取并校验 admins.json；任何异常都会置 process.exitCode = 1 */
 function loadAdmins(): AdminEntry[] {
-  const file = resolve(__dirname, 'admins.json');
-  if (!existsSync(file)) {
+  // 兼容两处位置：源码运行（prisma/ 下）与编译后运行（Docker 生产，dist/ 下）
+  const candidates = [
+    resolve(__dirname, '../prisma/admins.json'),
+    resolve(__dirname, 'admins.json'),
+  ];
+  const file = candidates.find((p) => existsSync(p));
+  if (!file) {
     console.error(
       '[seed] 未找到 admins.json：请先将 admins.example.json 复制为 admins.json 并修改其中的账号密码',
     );
