@@ -12,12 +12,13 @@ import {
   MARGINS,
   type PageMode,
   type SwipeLayout,
+  type VerticalStyle,
   type SwipeDirection,
 } from '@starcloud/shared';
 
 // 转出口供 App 内使用
 export { FONT_STEPS, LINE_HEIGHTS, MARGINS };
-export type { PageMode, SwipeLayout, SwipeDirection };
+export type { PageMode, SwipeLayout, VerticalStyle, SwipeDirection };
 
 export type SpreadTwoUp = 'single' | 'two-up';
 
@@ -27,6 +28,7 @@ export interface ReadingPrefs {
   marginIdx: number; // MARGINS 索引
   pageMode: PageMode;
   swipeLayout: SwipeLayout; // 滑动翻页轴向（仅 pageMode==='swipe'）
+  verticalStyle: VerticalStyle; // 上下滑动滚动样式（仅 swipe+vertical）
   swipeDirection: SwipeDirection;
   spreadTwoUp: SpreadTwoUp; // App 暂未实现双列渲染，仅与 Web 键对应持久化
 }
@@ -37,6 +39,7 @@ const DEFAULTS: ReadingPrefs = {
   marginIdx: 1,
   pageMode: 'tap',
   swipeLayout: 'horizontal',
+  verticalStyle: 'continuous',
   swipeDirection: 'left-next',
   spreadTwoUp: 'two-up',
 };
@@ -48,6 +51,7 @@ const KEYS: Record<keyof ReadingPrefs, string> = {
   marginIdx: 'starcloud.margin',
   pageMode: 'starcloud.pageMode',
   swipeLayout: 'starcloud.swipeLayout',
+  verticalStyle: 'starcloud.verticalStyle',
   swipeDirection: 'starcloud.swipeDirection',
   spreadTwoUp: 'starcloud.spreadTwoUp',
 };
@@ -57,6 +61,7 @@ const LEGACY_KEY = 'starcloud.readingPrefs';
 
 const MODES: PageMode[] = ['tap', 'swipe'];
 const LAYOUTS: SwipeLayout[] = ['horizontal', 'vertical'];
+const VSTYLES: VerticalStyle[] = ['continuous', 'paged'];
 const DIRECTIONS: SwipeDirection[] = ['left-next', 'right-next'];
 const SPREADS: SpreadTwoUp[] = ['single', 'two-up'];
 
@@ -82,6 +87,9 @@ function normalize(raw: Partial<ReadingPrefs>): ReadingPrefs {
     swipeLayout: LAYOUTS.includes(base.swipeLayout)
       ? base.swipeLayout
       : DEFAULTS.swipeLayout,
+    verticalStyle: VSTYLES.includes(base.verticalStyle)
+      ? base.verticalStyle
+      : DEFAULTS.verticalStyle,
     swipeDirection: DIRECTIONS.includes(base.swipeDirection)
       ? base.swipeDirection
       : DEFAULTS.swipeDirection,
@@ -118,6 +126,10 @@ function parseField(
     case 'swipeLayout':
       return LAYOUTS.includes(value as SwipeLayout)
         ? { ...current, swipeLayout: value as SwipeLayout }
+        : current;
+    case 'verticalStyle':
+      return VSTYLES.includes(value as VerticalStyle)
+        ? { ...current, verticalStyle: value as VerticalStyle }
         : current;
     case 'swipeDirection':
       return DIRECTIONS.includes(value as SwipeDirection)

@@ -194,6 +194,27 @@ export default function ReaderScreen() {
               </View>
             )}
 
+            {/* 滚动样式：仅 swipe + 竖向轴向（冻结规格一/二，App 纯触屏无桌面分支） */}
+            {prefs.pageMode === 'swipe' && prefs.swipeLayout === 'vertical' && (
+              <View>
+                <Text style={{ color: colors.textLight, fontSize: 13, marginBottom: 6 }}>
+                  滚动样式
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SegmentBtn
+                    label="无缝滚动"
+                    active={prefs.verticalStyle === 'continuous'}
+                    onPress={() => patchPrefs({ verticalStyle: 'continuous' })}
+                  />
+                  <SegmentBtn
+                    label="单页翻动"
+                    active={prefs.verticalStyle === 'paged'}
+                    onPress={() => patchPrefs({ verticalStyle: 'paged' })}
+                  />
+                </View>
+              </View>
+            )}
+
             {/* 冻结规格五：swipe/horizontal 同样显示「翻页方向」 */}
             {prefs.pageMode === 'swipe' && prefs.swipeLayout === 'horizontal' && (
               <View>
@@ -430,6 +451,7 @@ function EpubPane({
           marginPx: MARGINS[prefs.marginIdx],
           pageMode: prefs.pageMode,
           swipeLayout: prefs.swipeLayout,
+          verticalStyle: prefs.verticalStyle,
         });
         if (!cancelled) setHtml(h);
       } catch (err) {
@@ -444,7 +466,7 @@ function EpubPane({
   }, [bookKey, fileUri]);
 
   // 排版/翻页模式变化：重建阅读页（渲染参数随 HTML 一起注入）
-  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.marginIdx}-${prefs.pageMode}-${prefs.swipeLayout}`;
+  const styleKey = `${prefs.fontStep}-${prefs.lineHeightIdx}-${prefs.marginIdx}-${prefs.pageMode}-${prefs.swipeLayout}-${prefs.verticalStyle}`;
   const firstStyle = useRef(true);
   useEffect(() => {
     if (firstStyle.current || !html) {
@@ -459,6 +481,7 @@ function EpubPane({
       marginPx: MARGINS[prefs.marginIdx],
       pageMode: prefs.pageMode,
       swipeLayout: prefs.swipeLayout,
+      verticalStyle: prefs.verticalStyle,
     }).then((h) => {
       if (!cancelledRef.current) setHtml(h);
     });
@@ -517,6 +540,11 @@ function EpubPane({
         // 与 Web EpubViewer 逐字一致：(dx > 0) === (方向为 left-next) 即下一页
         const isNext = (msg.dx > 0) === (prefs.swipeDirection === 'left-next');
         navTo(isNext ? 'next' : 'prev');
+      }
+      if (msg.t === 'vswipe') {
+        // 纵向手势恒定（horizontal 的附加纵向手势 / vertical paged 主手势）：
+        // 上推 dy<0 = 下一页，下拉 dy>0 = 上一页
+        navTo(msg.dy < 0 ? 'next' : 'prev');
       }
     } catch {
       // 非 JSON 忽略
@@ -661,7 +689,11 @@ function TxtPane({
     color: '#2a2622',
   };
 
-  if (prefs.pageMode === 'swipe' && prefs.swipeLayout === 'vertical') {
+  if (
+    prefs.pageMode === 'swipe' &&
+    prefs.swipeLayout === 'vertical' &&
+    prefs.verticalStyle === 'continuous'
+  ) {
     // 上下无缝滚动：整章连成一条，滚到底自动接下一章
     return (
       <ScrollView
@@ -687,7 +719,8 @@ function TxtPane({
     );
   }
 
-  // 分页式：tap = 点击左右分区；swipe+horizontal = 横滑手势（公式与 Web 一致）
+  // 分页式：tap = 点击左右分区；swipe+horizontal = 横滑手势（公式与 Web 一致）；
+  // swipe+vertical+paged = 纵滑单页翻动（上推/下拉）
   const initialPage =
     pages.length > 0
       ? Math.min(pages.length - 1, Math.floor((initialPercentage / 100) * pages.length))
@@ -742,9 +775,29 @@ function PagedPane({
   );
 
   /** 横滑判定：与 Web EpubViewer 逐字一致 —— (dx > 0) === (方向为 left-next) 即下一页 */
+  const isVerticalPaged =
+    prefs.pageMode === 'swipe' &&
+    prefs.swipeLayout === 'vertical' &&
+    prefs.verticalStyle === 'paged';
   function onSwipeEnd(e: PanGestureHandlerStateChangeEvent) {
-    if (e.nativeEvent.state !== State.END) return;
+    // END = 主轴向激活完成；FAILED = 被 failOffset 拦截（横向模式下指纵滑过头，
+    // 正是需求 A 的纵向手势场景；纵向 paged 模式下指横滑，应忽略）
+    const state = e.nativeEvent.state;
+    if (state !== State.END && state !== State.FAILED) return;
     const dx = e.nativeEvent.translationX;
+    const dy = e.nativeEvent.translationY;
+    if (isVerticalPaged) {
+      // 上下单页翻动：纵向位移为主手势（主轴判定，横向忽略）
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50) {
+        navigate(dy < 0 ? 'next' : 'prev');
+      }
+      return;
+    }
+    // 左右滑动：主轴分派 —— 纵向手势恒定（规格二），横向随方向偏好
+    if (Math.abs(dy) > Math.abs(dx)) {
+      if (Math.abs(dy) > 50) navigate(dy < 0 ? 'next' : 'prev');
+      return;
+    }
     if (Math.abs(dx) > 50) {
       const isNext = (dx > 0) === (prefs.swipeDirection === 'left-next');
       navigate(isNext ? 'next' : 'prev');
@@ -783,11 +836,14 @@ function PagedPane({
           </Text>
         </Pressable>
       ) : (
-        // 左右滑动：PanGestureHandler 判定 dx>50（横滑优先，竖滑不拦截）
+        // 左右滑动：PanGestureHandler 判定 dx>50（横滑优先，竖滑不拦截）；
+        // 上下单页翻动：判定 dy>50（纵滑优先，横滑不拦截）
         <PanGestureHandler
           onHandlerStateChange={onSwipeEnd}
-          activeOffsetX={[-12, 12]}
-          failOffsetY={[-16, 16]}
+          activeOffsetX={isVerticalPaged ? undefined : [-12, 12]}
+          failOffsetY={isVerticalPaged ? undefined : [-16, 16]}
+          activeOffsetY={isVerticalPaged ? [-12, 12] : undefined}
+          failOffsetX={isVerticalPaged ? [-16, 16] : undefined}
         >
           <View style={{ flex: 1, padding: margin }}>
             <Text style={[textStyle, { maxWidth: 720, width: '100%' }]}>

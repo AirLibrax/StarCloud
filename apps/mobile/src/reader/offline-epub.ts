@@ -4,16 +4,18 @@
  * 书籍 base64 数据，epubjs 以 base64 编码模式直接解压（不走 XHR，无 data: URI 限制）。
  *
  * 翻页语义与 Web 端 EpubViewer 一致（消费 @starcloud/shared）：
- * - tap / swipe+horizontal：页面对指针透明（.sc-no-pointer，同 Web .no-pointer），
- *   手势桥接 JS 在宿主 document 上判定原始手势（touchstart/touchend），
- *   postMessage 回 RN，由 RN 按 shared 模型判定语义并回注 __scNav() 执行翻页；
- * - swipe+vertical：flow=scrolled + manager=continuous（与 Web 相同的映射表），
- *   整章连成一条无缝滚动、滚到底自动接下一章，引擎原生滚动，无桥接。
+ * - tap / swipe+horizontal / swipe+vertical+paged：页面对指针透明
+ *   （.sc-no-pointer，同 Web .no-pointer），手势桥接 JS 在宿主 document 上
+ *   判定原始手势（touchstart/touchend），postMessage 回 RN，
+ *   由 RN 按 shared 模型判定语义并回注 __scNav() 执行翻页；
+ * - swipe+vertical+continuous：flow=scrolled + manager=continuous
+ *   （与 Web 相同的映射表），整章连成一条无缝滚动、滚到底自动接下一章，
+ *   引擎原生滚动，无桥接。
  * 键盘通道不需要（纯触屏）。
  */
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
-import type { PageMode, SwipeLayout } from '@starcloud/shared';
+import type { PageMode, SwipeLayout, VerticalStyle } from '@starcloud/shared';
 
 const vendorAssets = {
   jszip: require('../../assets/vendor/jszip.min.js.txt'),
@@ -47,6 +49,8 @@ export interface OfflineReaderOptions {
   pageMode: PageMode;
   /** 滑动轴向（shared.SwipeLayout；仅 pageMode==='swipe' 时有意义） */
   swipeLayout: SwipeLayout;
+  /** 上下滑动滚动样式（shared.VerticalStyle；仅 swipe+vertical 时有意义） */
+  verticalStyle: VerticalStyle;
 }
 
 /**
@@ -68,10 +72,15 @@ export async function buildOfflineEpubHtml(
   const safeEpub = epub.replace(/<\/script>/gi, '<\\/script>');
 
   // 与 Web EpubViewer 相同的映射表（冻结规格二/五）：
-  // tap / swipe+horizontal → paginated + default；swipe+vertical → scrolled + continuous
-  const isVerticalScroll = opts.pageMode === 'swipe' && opts.swipeLayout === 'vertical';
-  // 需要手势桥接的模式（tap / swipe+horizontal）：页面对指针透明，与 Web .no-pointer 同理
-  const needsBridge = !isVerticalScroll;
+  // tap / swipe+horizontal → paginated + default；
+  // swipe+vertical+continuous → scrolled + continuous；
+  // swipe+vertical+paged → paginated + default + axis='vertical'
+  const isVertical = opts.pageMode === 'swipe' && opts.swipeLayout === 'vertical';
+  const isVerticalPaged = isVertical && opts.verticalStyle === 'paged';
+  const isVerticalContinuous = isVertical && !isVerticalPaged;
+  // 需要手势桥接的模式（tap / swipe+horizontal / swipe+vertical+paged）：
+  // 页面对指针透明，与 Web .no-pointer 同理；唯一例外是 vertical+continuous（原生滚动）
+  const needsBridge = opts.pageMode === 'tap' || isVerticalPaged || (opts.pageMode === 'swipe' && opts.swipeLayout === 'horizontal');
 
   return `<!doctype html><html><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
@@ -94,6 +103,7 @@ window.__fontPct = ${opts.fontSizePct};
 window.__lineHeight = ${opts.lineHeight};
 window.__pageMode = "${opts.pageMode}";
 window.__swipeLayout = "${opts.swipeLayout}";
+window.__verticalStyle = "${opts.verticalStyle}";
 function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__chunks = [];
 window.__pushChunk = function(c) { window.__chunks.push(c); };
@@ -106,13 +116,18 @@ window.__openBook = function() {
   try {
     var b64 = window.__chunks.join('');
     var book = ePub(b64, { encoding: 'base64' });
-    var isScroll = ${isVerticalScroll ? 'true' : 'false'};
-    var rendition = book.renderTo('viewer', {
+    var isScroll = ${isVerticalContinuous ? 'true' : 'false'};
+    var isPaged = ${isVerticalPaged ? 'true' : 'false'};
+    var renderOpts = {
       width: '100%', height: '100%',
-      flow: isScroll ? 'scrolled' : 'paginated',
+      flow: isPaged ? 'paginated' : (isScroll ? 'scrolled' : 'paginated'),
       manager: isScroll ? 'continuous' : 'default',
       spread: 'none'
-    });
+    };
+    // axis:'vertical' 单页翻动为 epubjs default manager 运行时原生能力
+    // （与 Web EpubViewer 相同的映射表：仅 paged 注入 axis）
+    if (isPaged) { renderOpts.axis = 'vertical'; }
+    var rendition = book.renderTo('viewer', renderOpts);
     window.__rendition = rendition;
     rendition.themes.register('paper', {
       body: {
@@ -129,6 +144,10 @@ window.__openBook = function() {
     rendition.themes.fontSize(window.__fontPct + '%');
     // 手势桥接：只上报原始手势，语义由 RN 按 shared 模型判定
     // （iframes 内事件不冒泡到宿主页；指针透明后触摸落在宿主 document 上）
+    // 主轴分派：swipe 模式下 |dy|>|dx| 走纵向（恒定上推=下一页/下拉=上一页）；
+    // |dx|>|dy| 走横向（RN 侧按方向偏好判定）；tap 模式仅点击，无纵向手势
+    var isSwipeMode = window.__pageMode === 'swipe';
+    var isVPaged = isSwipeMode && window.__swipeLayout === 'vertical' && window.__verticalStyle === 'paged';
     var tsX = null, tsY = null;
     document.addEventListener('touchstart', function(e) {
       if (e.touches.length === 1) { tsX = e.touches[0].clientX; tsY = e.touches[0].clientY; }
@@ -140,9 +159,13 @@ window.__openBook = function() {
       var dx = cx - tsX;
       var dy = cy - tsY;
       tsX = null; tsY = null;
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      var mainVertical = Math.abs(dy) > Math.abs(dx);
+      if (isSwipeMode && mainVertical && Math.abs(dy) > 50) {
+        // 纵向位移（Horizontal 的恒定纵向手势 / Vertical Paged 的主手势）
+        post({ t: 'vswipe', dy: dy });
+      } else if (isSwipeMode && !isVPaged && !mainVertical && Math.abs(dx) > 50) {
         post({ t: 'swipe', dx: dx });
-      } else if (window.__pageMode === 'tap') {
+      } else if (window.__pageMode === 'tap' && Math.abs(dx) < 50 && Math.abs(dy) < 50) {
         post({ t: 'tap', x: cx });
       }
     }, { passive: true });
