@@ -201,6 +201,12 @@ App 在「设置」页填入服务器地址并登录即可连接云端书架；�
 
 v1 原型（Express + sqlite3 + 原生 HTML 管理页）封存于 [`legacy`](../../tree/legacy) 分支。
 
-## 许可
+## License / 许可证
 
-个人学习项目。
+本项目采用 [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)（GPL-3.0）开源，
+完整许可条款见仓库根目录 [LICENSE](LICENSE) 文件。
+
+- SPDX 标识：`GPL-3.0-only`
+- Copyright (C) 2026 AirLibrax
+
+> 个人学习项目，以 GPL-3.0 条款发布；使用、修改或分发本项目代码即表示接受该协议的条款与条件。

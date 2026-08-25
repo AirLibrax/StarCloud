@@ -2,6 +2,7 @@
   "name": "starcloud",
   "version": "2.0.0",
   "private": true,
+  "license": "GPL-3.0-only",
   "description": "星辰云图书馆 - 全栈单体仓",
   "workspaces": [
     "apps/*",
