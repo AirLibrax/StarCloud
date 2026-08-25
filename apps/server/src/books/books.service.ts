@@ -17,7 +17,7 @@ const ALLOWED_TYPES: Record<string, BookFileType> = {
   'text/plain': 'txt',
 };
 
-/** 浏览器常把 .epub/.pdf 标成通用二进制流，此时按扩展名兕底 */
+/** 浏览器常把 .epub/.pdf 标成通用二进制流，此时按扩展名兜底 */
 const EXT_FALLBACK: Record<string, BookFileType> = {
   '.pdf': 'pdf',
   '.epub': 'epub',
@@ -74,7 +74,7 @@ export class BooksService {
       throw new BadRequestException('缺少书籍文件');
     }
 
-    // mimetype 白名单优先；通用二进制流时按扩展名兕底。
+    // mimetype 白名单优先；通用二进制流时按扩展名兜底。
     // 此时 multer 已把文件写入 uploads，拒绝时必须清理，否则留下孤儿文件
     const fileType = resolveFileType(file.mimetype, file.originalname);
     if (!fileType) {

@@ -57,7 +57,7 @@ function findCoverHref(opfContent: string): string | null {
   );
   if (byName) return byName['@_href'];
 
-  // 路径4: 最后兕底，取 manifest 里第一张图片（通常就是封面）
+  // 路径4: 最后兜底，取 manifest 里第一张图片（通常就是封面）
   const anyImage = items.find((it) => isImageHref(String(it?.['@_href'] ?? '')));
   return anyImage ? anyImage['@_href'] : null;
 }
