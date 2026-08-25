@@ -8,6 +8,7 @@ import {
   MARGINS,
   type PageMode,
   type SwipeLayout,
+  type VerticalStyle,
   type SwipeDirection,
 } from '@starcloud/shared';
 import { getToken } from '../api/client';
@@ -27,12 +28,13 @@ const LINE_KEY = 'starcloud.lineHeight';
 const MARGIN_KEY = 'starcloud.margin';
 const MODE_KEY = 'starcloud.pageMode';
 const LAYOUT_KEY = 'starcloud.swipeLayout';
+const VSTYLE_KEY = 'starcloud.verticalStyle';
 const DIR_KEY = 'starcloud.swipeDirection';
 const SPREAD_KEY = 'starcloud.spreadTwoUp';
 /** 双列排版生效的最小视口宽度：仅平板横屏/桌面（>900px）允许双列 */
 const SPREAD_MIN_WIDTH = 900;
-/** 左右滑动手势触发阈值（px），与 App 端一致 */
-const SWIPE_DX_THRESHOLD = 50;
+/** 滑动手势触发阈值（px），与 App 端一致 */
+const SWIPE_THRESHOLD = 50;
 
 function readIdx(key: string, len: number, fallback: number): number {
   const saved = parseInt(localStorage.getItem(key) ?? '', 10);
@@ -45,6 +47,11 @@ function readPageMode(): PageMode {
 
 function readSwipeLayout(): SwipeLayout {
   return localStorage.getItem(LAYOUT_KEY) === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+/** 上下滑动滚动样式：无缝滚动（默认）/ 单页翻动（仅竖向轴向有意义） */
+function readVerticalStyle(): VerticalStyle {
+  return localStorage.getItem(VSTYLE_KEY) === 'paged' ? 'paged' : 'continuous';
 }
 
 function readDirection(): SwipeDirection {
@@ -90,12 +97,15 @@ function currentCfi(rendition: any, fallbackIdx: number | null): string | undefi
  *          所有点击落在外层 .epub-viewer 容器，由 shared.tapZoneAction()
  *          按「翻页方向」偏好做左右两半分区判定；
  * - swipe: 滑动翻页 ——
- *   · 触屏 + horizontal：书页同样 pe:none，外层容器 touchstart/touchend
- *     判定 |dx|>50，isNext = (dx>0)===(方向为 left-next)；
- *   · 触屏 + vertical：flow=scrolled + manager=continuous，
- *     整章连成一条无缝滚动、滚到底自动接下一章；
+ *   · 触屏 + horizontal：书页 pe:none，外层容器 touchstart/touchend
+ *     判定，取位移主轴：|dy|>|dx| 时纵向手势恒定（上推=下一页/下拉=上一页），
+ *     否则横向公式 isNext = (dx>0)===(方向为 left-next)；
+ *   · 触屏 + vertical + continuous：flow=scrolled + manager=continuous，
+ *     整章连成一条无缝滚动、滚到底自动接下一章（引擎原生滚动）；
+ *   · 触屏 + vertical + paged：flow=paginated + manager=default +
+ *     axis='vertical'，书页 pe:none，外层容器纵向位移判定（上推/下拉翻页）；
  *   · 桌面（非触屏）：固定上下无缝滚动（同一连续渲染），强制单列，
- *     工具栏单/双列按钮禁用显示 ∅。
+ *     工具栏单/双列按钮禁用显示 ∅（滚动样式固定 continuous，无子选项）。
  * 单列/双列：视口 >900px（平板横屏/桌面）且用户开启双列偏好且非
  * 桌面滑动模式时 spread='always'，其余一律 'none'；
  * 视口跨过门槛自动重排防截断，窄屏隐藏切换按钮。
@@ -141,6 +151,11 @@ export default function EpubViewer({
     const stored = readSwipeLayout();
     return readPageMode() === 'swipe' && !isTouch ? 'vertical' : stored;
   });
+  const [verticalStyle, setVerticalStyle] = useState<VerticalStyle>(() => {
+    // 桌面（无触屏）滑动翻页固定 continuous 无缝滚动，不显示滚动样式子选项
+    const stored = readVerticalStyle();
+    return readPageMode() === 'swipe' && !isTouch ? 'continuous' : stored;
+  });
   const [swipeDir, setSwipeDir] = useState<SwipeDirection>(readDirection);
   const [twoUpPref, setTwoUpPref] = useState(readSpreadTwoUpPref);
   /** 视口宽度是否达到双列门槛（>900px：平板横屏/桌面） */
@@ -151,8 +166,9 @@ export default function EpubViewer({
 
   /** 桌面滑动翻页：固定上下无缝滚动 + 强制单列（规格二/四） */
   const desktopSwipe = pageMode === 'swipe' && !isTouch;
-  /** 实际生效的单列/双列 = 用户偏好 ∩ 视口宽度 ∩ 非桌面滑动强制单列 */
-  const twoUp = twoUpPref && isWide && !desktopSwipe;
+  /** 实际生效的单列/双列 = 用户偏好 ∩ 视口宽度 ∩ 非桌面滑动 ∩ 非上下轴向
+   *  （上下滑动连续/单页翻动均为纵向排版，不使用横向双列） */
+  const twoUp = twoUpPref && isWide && !desktopSwipe && swipeLayout !== 'vertical';
 
   /* ---- refs：渲染期与 state 严格同步（规格七.4），
      —— 一次性初始化的 effect / 事件处理一律读 ref，保证重建拿到最新配置 ---- */
@@ -162,10 +178,12 @@ export default function EpubViewer({
   const lastNavAtRef = useRef(0);
   const pageModeRef = useRef<PageMode>(pageMode);
   const swipeLayoutRef = useRef<SwipeLayout>(swipeLayout);
+  const verticalStyleRef = useRef<VerticalStyle>(verticalStyle);
   const swipeDirRef = useRef<SwipeDirection>(swipeDir);
   const twoUpRef = useRef(twoUp);
   pageModeRef.current = pageMode;
   swipeLayoutRef.current = swipeLayout;
+  verticalStyleRef.current = verticalStyle;
   swipeDirRef.current = swipeDir;
   twoUpRef.current = twoUp;
   const lastSpineIdxRef = useRef<number | null>(null);
@@ -262,11 +280,16 @@ export default function EpubViewer({
     const container = containerRef.current;
     const mode = pageModeRef.current;
     const layout = swipeLayoutRef.current;
-    /** 上下滑动：连续渲染，跨章无缝（规格二） */
+    const vstyle = verticalStyleRef.current;
+    /** 上下滑动：连续渲染跨章无缝（touch）或单页翻动（axis vertical） */
     const isVerticalScroll = mode === 'swipe' && layout === 'vertical';
-    /** 页面对指针透明：tap 与 swipe+horizontal（规格二/七.3） */
+    const isVerticalContinuous = isVerticalScroll && vstyle === 'continuous';
+    const isVerticalPaged = isVerticalScroll && vstyle === 'paged';
+    /** 页面对指针透明：tap / swipe+horizontal / swipe+vertical+paged（规格二/七.3） */
     const needsNoPointer =
-      mode === 'tap' || (mode === 'swipe' && layout === 'horizontal');
+      mode === 'tap' ||
+      (mode === 'swipe' && layout === 'horizontal') ||
+      isVerticalPaged;
 
     // 重建开始即重置状态，并在取回文件前就把 no-pointer 类切到新模式
     setReady(false);
@@ -288,8 +311,11 @@ export default function EpubViewer({
         localRendition = ebook.renderTo(container!, {
           width: '100%',
           height: '100%',
-          flow: isVerticalScroll ? 'scrolled' : 'paginated',
-          manager: isVerticalScroll ? 'continuous' : 'default',
+          flow: isVerticalScroll ? (isVerticalPaged ? 'paginated' : 'scrolled') : 'paginated',
+          manager: isVerticalScroll ? (isVerticalContinuous ? 'continuous' : 'default') : 'default',
+          // axis:'vertical' 单页翻动为 epubjs default manager 运行时原生能力，
+          // 官方类型声明缺失，此处按规格断言注入
+          ...(isVerticalPaged ? ({ axis: 'vertical' } as any) : {}),
           spread: isVerticalScroll ? 'none' : twoUpRef.current ? 'always' : 'none',
         });
         renditionRef.current = localRendition;
@@ -486,7 +512,8 @@ export default function EpubViewer({
   }
 
   /** 切换翻页方式：整体重建渲染器，以章节序号衔接位置。
-   *  桌面（非触屏）选滑动翻页时自动降级为上下无缝滚动（滚轮阅读）。
+   *  桌面（非触屏）选滑动翻页时自动降级为上下无缝滚动（滚轮阅读），
+   *  滚动样式固定 continuous（规格二桌面降级规则）。
    *  （refs 由渲染期同步自动跟随 state，无需手工赋值） */
   function changePageMode(mode: PageMode) {
     if (mode === pageMode || !ready) return;
@@ -495,7 +522,9 @@ export default function EpubViewer({
 
     if (mode === 'swipe' && !isTouch) {
       setSwipeLayout('vertical');
+      setVerticalStyle('continuous');
       localStorage.setItem(LAYOUT_KEY, 'vertical');
+      localStorage.setItem(VSTYLE_KEY, 'continuous');
     }
 
     setRebuildTick((t) => t + 1);
@@ -506,6 +535,14 @@ export default function EpubViewer({
     if (layout === swipeLayout || !ready) return;
     setSwipeLayout(layout);
     localStorage.setItem(LAYOUT_KEY, layout);
+    setRebuildTick((t) => t + 1);
+  }
+
+  /** 切换上下滑动滚动样式（仅触屏 + 竖向轴向）：整体重建渲染器 */
+  function changeVerticalStyle(style: VerticalStyle) {
+    if (style === verticalStyle || !ready) return;
+    setVerticalStyle(style);
+    localStorage.setItem(VSTYLE_KEY, style);
     setRebuildTick((t) => t + 1);
   }
 
@@ -530,39 +567,69 @@ export default function EpubViewer({
     action === 'next' ? goNext() : goPrev();
   }
 
-  /* ---- 左右滑动（swipe+horizontal）：外层容器 touchstart/touchend 判定 ---- */
-  const touchStartX = useRef<number | null>(null);
+  /* ---- 滑动翻页手势（swipe+horizontal / swipe+vertical+paged）：
+     —— 外层容器 touchstart/touchend 判定，取位移主轴分派 ----
+     —— horizontal：|dy|>|dx| 时纵向手势恒定（上推=下一页/下拉=上一页），
+        否则横向公式 isNext=(dx>0)===(方向为 left-next)；
+     —— vertical+paged：纵向位移为主手势，判定同上纵向分支 ---- */
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
     if (e.target !== e.currentTarget) {
-      touchStartX.current = null;
+      touchStart.current = null;
       return;
     }
+    const layout = swipeLayoutRef.current;
     const active =
-      pageModeRef.current === 'swipe' && swipeLayoutRef.current === 'horizontal';
-    touchStartX.current = active ? e.touches[0].clientX : null;
+      pageModeRef.current === 'swipe' &&
+      (layout === 'horizontal' ||
+        (layout === 'vertical' && verticalStyleRef.current === 'paged'));
+    if (!active) {
+      touchStart.current = null;
+      return;
+    }
+    const t = e.touches[0];
+    touchStart.current = { x: t.clientX, y: t.clientY };
   }
   function handleTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
-    const startX = touchStartX.current;
-    touchStartX.current = null;
-    if (startX === null) return;
-    if (
-      pageModeRef.current !== 'swipe' ||
-      swipeLayoutRef.current !== 'horizontal' ||
-      !readyRef.current
-    ) {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start) return;
+    if (pageModeRef.current !== 'swipe' || !readyRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    const mainVertical = Math.abs(dy) > Math.abs(dx);
+
+    if (swipeLayoutRef.current === 'horizontal') {
+      if (mainVertical) {
+        // 纵向手势恒定，不随方向偏好镜像（规格二）
+        if (Math.abs(dy) > SWIPE_THRESHOLD) (dy < 0 ? goNext() : goPrev());
+      } else if (Math.abs(dx) > SWIPE_THRESHOLD) {
+        // 规格二：isNext = (dx > 0) === (方向为 left-next)
+        const isNext = (dx > 0) === (swipeDirRef.current === 'left-next');
+        isNext ? goNext() : goPrev();
+      }
       return;
     }
-    const dx = e.changedTouches[0].clientX - startX;
-    if (Math.abs(dx) > SWIPE_DX_THRESHOLD) {
-      // 规格二：isNext = (dx > 0) === (方向为 left-next)
-      const isNext = (dx > 0) === (swipeDirRef.current === 'left-next');
-      isNext ? goNext() : goPrev();
+
+    if (
+      swipeLayoutRef.current === 'vertical' &&
+      verticalStyleRef.current === 'paged'
+    ) {
+      // 单页翻动主手势：纵向位移判定（主轴），横向位移忽略
+      if (mainVertical && Math.abs(dy) > SWIPE_THRESHOLD) {
+        (dy < 0 ? goNext() : goPrev());
+      }
     }
+    // vertical + continuous：引擎原生滚动，无手势处理
   }
 
   const showDirectionRow =
     pageMode === 'tap' ||
     (pageMode === 'swipe' && isTouch && swipeLayout === 'horizontal');
+  /** 滚动样式行：仅触屏 + swipe + 竖向轴向（桌面降级固定 continuous 不显示） */
+  const showVerticalStyleRow =
+    pageMode === 'swipe' && isTouch && swipeLayout === 'vertical';
 
   return (
     <div
@@ -716,6 +783,29 @@ export default function EpubViewer({
                     onClick={() => changeSwipeLayout('vertical')}
                   >
                     上下滑动
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {showVerticalStyleRow && (
+              <div className="setting-row">
+                <div className="setting-label">
+                  <span>滚动样式</span>
+                  <span>{verticalStyle === 'continuous' ? '无缝滚动' : '单页翻动'}</span>
+                </div>
+                <div className="segment-group">
+                  <button
+                    className={`segment-btn${verticalStyle === 'continuous' ? ' active' : ''}`}
+                    onClick={() => changeVerticalStyle('continuous')}
+                  >
+                    无缝滚动
+                  </button>
+                  <button
+                    className={`segment-btn${verticalStyle === 'paged' ? ' active' : ''}`}
+                    onClick={() => changeVerticalStyle('paged')}
+                  >
+                    单页翻动
                   </button>
                 </div>
               </div>
