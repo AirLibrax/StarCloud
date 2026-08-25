@@ -20,9 +20,8 @@ export default function SettingsScreen() {
   const navigation = useNavigation<Nav>();
   const current = getSettings();
   const [serverUrl, setServerUrl] = useState(current.serverUrl);
-  const [username, setUsername] = useState(
-    current.serverUrl ? '' : '', // 登录后才需要用户名密码；编辑时先留空
-  );
+  // 登录后才需要用户名密码；编辑时先留空
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 

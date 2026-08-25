@@ -15,10 +15,3 @@ export interface Book {
   uploadedAt: string;
   uploaderId: number | null;
 }
-
-/** 上传书籍时提交的元数据（文件本体走 multipart） */
-export interface CreateBookRequest {
-  title: string;
-  author?: string;
-  description?: string;
-}

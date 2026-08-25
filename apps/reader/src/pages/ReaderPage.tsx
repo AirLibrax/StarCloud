@@ -8,7 +8,7 @@ import EpubViewer from '../components/EpubViewer';
  * 阅读器：按格式分流渲染。
  * - TXT:  取全文，滚动式阅读；滚动位置换算页码并防抖上报进度
  * - PDF:  浏览器原生渲染（iframe + query token）
- * - EPUB: 下个迭代接入 epub.js
+ * - EPUB: EpubViewer（epubjs 渲染），章节级进度定位与完整交互体系
  */
 
 /** 每页字符数（TXT 按此估算总页数） */

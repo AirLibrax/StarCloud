@@ -6,6 +6,7 @@ import {
   FONT_STEPS,
   LINE_HEIGHTS,
   MARGINS,
+  MARGIN_LABELS,
   type PageMode,
   type SwipeLayout,
   type VerticalStyle,
@@ -75,8 +76,6 @@ function readSpreadTwoUpPref(): boolean {
 function detectTouch(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
 }
-
-const MARGIN_LABELS = ['窄', '中', '宽', '很宽'];
 
 function modeLabel(m: PageMode): string {
   return m === 'tap' ? '点击翻页' : '滑动翻页';

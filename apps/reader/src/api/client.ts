@@ -4,17 +4,11 @@ const TOKEN_KEY = 'starcloud.token';
 const USER_KEY = 'starcloud.user';
 
 /**
- * 后端地址。
- * - 网页版：默认同源（dev 由 Vite 代理转发，生产与后端同域部署）
- * - App 版：在设置里填服务器地址后存入 localStorage 即可切换
+ * 后端地址：网页版默认同源（dev 由 Vite 代理转发，生产与后端同域部署）。
+ * 移动端有独立的 API 客户端（apps/mobile/src/api/client.ts），不经过本模块。
  */
 export function getServerUrl(): string {
   return (localStorage.getItem('starcloud.serverUrl') ?? '').replace(/\/+$/, '');
-}
-export function setServerUrl(url: string) {
-  const v = url.trim().replace(/\/+$/, '');
-  if (v) localStorage.setItem('starcloud.serverUrl', v);
-  else localStorage.removeItem('starcloud.serverUrl');
 }
 
 export function getToken(): string | null {

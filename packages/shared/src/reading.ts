@@ -15,6 +15,9 @@ export const LINE_HEIGHTS = [1.4, 1.6, 1.8, 2.0];
 /** 左右页边距档位（px） */
 export const MARGINS = [10, 24, 48, 80];
 
+/** 左右页边距档位的展示名（与 MARGINS 下标一一对应） */
+export const MARGIN_LABELS = ['窄', '中', '宽', '很宽'] as const;
+
 /* ---------------- 翻页方式 ---------------- */
 
 /**
@@ -44,13 +47,6 @@ export type VerticalStyle = 'continuous' | 'paged';
  * - right-next: 向右下一页（常规中文书方向）
  */
 export type SwipeDirection = 'left-next' | 'right-next';
-
-export interface ReadingInteractionPrefs {
-  pageMode: PageMode;
-  swipeLayout: SwipeLayout;
-  verticalStyle: VerticalStyle;
-  swipeDirection: SwipeDirection;
-}
 
 /* ---------------- 点击分区 ---------------- */
 

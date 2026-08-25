@@ -9,7 +9,6 @@
       "package": "com.airlibrax.starcloud"
     },
     "plugins": [
-      "expo-sqlite",
       "expo-asset",
       "expo-status-bar"
     ]

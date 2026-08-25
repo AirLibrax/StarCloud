@@ -22,6 +22,9 @@ const vendorAssets = {
   epub: require('../../assets/vendor/epub.min.js.txt'),
 };
 
+/** 桥接 JS 的手势触发阈值（px），与 Web 端 EpubViewer 的 SWIPE_THRESHOLD 一致 */
+const BRIDGE_SWIPE_THRESHOLD = 50;
+
 let vendorCache: { jszip: string; epub: string } | null = null;
 
 /** 读取打包的渲染引擎源码（首次加载后缓存） */
@@ -61,10 +64,8 @@ export interface OfflineReaderOptions {
  * 翻页语义判定统一在 RN 侧。
  */
 export async function buildOfflineEpubHtml(
-  bookKey: string,
   opts: OfflineReaderOptions,
 ): Promise<string> {
-  void bookKey;
   const { jszip, epub } = await loadVendorScripts();
 
   // 注意 </script> 会截断内联脚本，转义之
@@ -160,12 +161,12 @@ window.__openBook = function() {
       var dy = cy - tsY;
       tsX = null; tsY = null;
       var mainVertical = Math.abs(dy) > Math.abs(dx);
-      if (isSwipeMode && mainVertical && Math.abs(dy) > 50) {
+      if (isSwipeMode && mainVertical && Math.abs(dy) > ${BRIDGE_SWIPE_THRESHOLD}) {
         // 纵向位移（Horizontal 的恒定纵向手势 / Vertical Paged 的主手势）
         post({ t: 'vswipe', dy: dy });
-      } else if (isSwipeMode && !isVPaged && !mainVertical && Math.abs(dx) > 50) {
+      } else if (isSwipeMode && !isVPaged && !mainVertical && Math.abs(dx) > ${BRIDGE_SWIPE_THRESHOLD}) {
         post({ t: 'swipe', dx: dx });
-      } else if (window.__pageMode === 'tap' && Math.abs(dx) < 50 && Math.abs(dy) < 50) {
+      } else if (window.__pageMode === 'tap' && Math.abs(dx) < ${BRIDGE_SWIPE_THRESHOLD} && Math.abs(dy) < ${BRIDGE_SWIPE_THRESHOLD}) {
         post({ t: 'tap', x: cx });
       }
     }, { passive: true });

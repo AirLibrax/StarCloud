@@ -10,7 +10,7 @@ import { colors } from '../theme';
 import { fileUrl, reportProgress } from '../api/client';
 import { ensureCachedFile } from '../api/file-cache';
 import { saveLocalProgress, listLocalBooks } from '../storage/local-books';
-import { tapZoneAction } from '@starcloud/shared';
+import { tapZoneAction, MARGIN_LABELS } from '@starcloud/shared';
 import {
   getReadingPrefs,
   updateReadingPrefs,
@@ -22,10 +22,14 @@ import {
 
 import { buildOfflineEpubHtml } from '../reader/offline-epub';
 
- type Route = RouteProp<RootStackParamList, 'Reader'>;
+type Route = RouteProp<RootStackParamList, 'Reader'>;
 
-/** 边距档位名称（与 Web 阅读端一致） */
-const MARGIN_LABELS = ['窄', '中', '宽', '很宽'];
+/** 手势触发阈值（px），与 Web 端 EpubViewer 一致 */
+const SWIPE_THRESHOLD = 50;
+/** TXT 基准字号（px），档位百分比以此为基数换算 */
+const TXT_BASE_FONT_PX = 17;
+/** 恢复滚动位置的高度估算系数：内容字符数 × 行高（约 1.5 倍字号）估算总高 */
+const TXT_SCROLL_HEIGHT_FACTOR = 1.5;
 
 /**
  * 阅读器（规格 F4/F5）：
@@ -239,8 +243,6 @@ export default function ReaderScreen() {
         )}
       </View>
 
-      {!fileType && null}
-
       {fileType === 'epub' && (
         <EpubLoader
           source={source}
@@ -443,7 +445,7 @@ function EpubPane({
     setHtml(null);
     (async () => {
       try {
-        const h = await buildOfflineEpubHtml(bookKey, {
+        const h = await buildOfflineEpubHtml({
           fileUri,
           initialPercentage,
           fontSizePct: FONT_STEPS[prefs.fontStep],
@@ -473,7 +475,7 @@ function EpubPane({
       firstStyle.current = false;
       return;
     }
-    buildOfflineEpubHtml(bookKey, {
+    buildOfflineEpubHtml({
       fileUri,
       initialPercentage,
       fontSizePct: FONT_STEPS[prefs.fontStep],
@@ -655,7 +657,7 @@ function TxtPane({
         restored.current = true;
         requestAnimationFrame(() => {
           node.scrollTo({
-            y: (initialPercentage / 100) * content.length * 1.5,
+            y: (initialPercentage / 100) * content.length * TXT_SCROLL_HEIGHT_FACTOR,
             animated: false,
           });
         });
@@ -664,7 +666,7 @@ function TxtPane({
     [content, initialPercentage, prefs.pageMode],
   );
 
-  const fontPx = (FONT_STEPS[prefs.fontStep] / 100) * 17;
+  const fontPx = (FONT_STEPS[prefs.fontStep] / 100) * TXT_BASE_FONT_PX;
   const lineHeight = fontPx * LINE_HEIGHTS[prefs.lineHeightIdx];
   const margin = MARGINS[prefs.marginIdx];
 
@@ -788,17 +790,17 @@ function PagedPane({
     const dy = e.nativeEvent.translationY;
     if (isVerticalPaged) {
       // 上下单页翻动：纵向位移为主手势（主轴判定，横向忽略）
-      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50) {
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > SWIPE_THRESHOLD) {
         navigate(dy < 0 ? 'next' : 'prev');
       }
       return;
     }
     // 左右滑动：主轴分派 —— 纵向手势恒定（规格二），横向随方向偏好
     if (Math.abs(dy) > Math.abs(dx)) {
-      if (Math.abs(dy) > 50) navigate(dy < 0 ? 'next' : 'prev');
+      if (Math.abs(dy) > SWIPE_THRESHOLD) navigate(dy < 0 ? 'next' : 'prev');
       return;
     }
-    if (Math.abs(dx) > 50) {
+    if (Math.abs(dx) > SWIPE_THRESHOLD) {
       const isNext = (dx > 0) === (prefs.swipeDirection === 'left-next');
       navigate(isNext ? 'next' : 'prev');
     }
@@ -866,5 +868,3 @@ function PagedPane({
     </View>
   );
 }
-
-// 上下滚动式的“页变化才报”守卫已并入 TxtPane 组件内 ref（lastTxtPageRef）

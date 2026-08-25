@@ -6,12 +6,6 @@ export interface UserPublic {
   createdAt: string;
 }
 
-/** 登录请求 */
-export interface LoginRequest {
-  username: string;
-  password: string;
-}
-
 /** 登录响应 */
 export interface LoginResponse {
   accessToken: string;
