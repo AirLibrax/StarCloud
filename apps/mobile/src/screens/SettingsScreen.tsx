@@ -69,14 +69,14 @@ export default function SettingsScreen() {
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={{ color: 'colors.accent', fontSize: 15 }}>← 返回</Text>
+          <Text style={{ color: colors.accent, fontSize: 15 }}>← 返回</Text>
         </TouchableOpacity>
-        <Text style={{ color: 'colors.text', fontSize: 19, fontWeight: '600', marginLeft: 14 }}>
+        <Text style={{ color: colors.text, fontSize: 19, fontWeight: '600', marginLeft: 14 }}>
           设置
         </Text>
       </View>
 
-      <Text style={{ color: 'colors.text', fontSize: 15, marginBottom: 6 }}>服务器地址</Text>
+      <Text style={{ color: colors.text, fontSize: 15, marginBottom: 6 }}>服务器地址</Text>
       <TextInput
         value={serverUrl}
         onChangeText={setServerUrl}
@@ -86,11 +86,11 @@ export default function SettingsScreen() {
         autoCorrect={false}
         keyboardType="url"
         style={{
-          backgroundColor: 'colors.card',
+          backgroundColor: colors.card,
           borderRadius: 6,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          color: 'colors.text',
+          color: colors.text,
           fontSize: 15,
           marginBottom: 16,
         }}
@@ -98,32 +98,32 @@ export default function SettingsScreen() {
 
       {!connected && (
         <>
-          <Text style={{ color: 'colors.text', fontSize: 15, marginBottom: 6 }}>用户名</Text>
+          <Text style={{ color: colors.text, fontSize: 15, marginBottom: 6 }}>用户名</Text>
           <TextInput
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
             style={{
-              backgroundColor: 'colors.card',
+              backgroundColor: colors.card,
               borderRadius: 6,
               paddingVertical: 10,
               paddingHorizontal: 12,
-              color: 'colors.text',
+              color: colors.text,
               fontSize: 15,
               marginBottom: 16,
             }}
           />
-          <Text style={{ color: 'colors.text', fontSize: 15, marginBottom: 6 }}>密码</Text>
+          <Text style={{ color: colors.text, fontSize: 15, marginBottom: 6 }}>密码</Text>
           <TextInput
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             style={{
-              backgroundColor: 'colors.card',
+              backgroundColor: colors.card,
               borderRadius: 6,
               paddingVertical: 10,
               paddingHorizontal: 12,
-              color: 'colors.text',
+              color: colors.text,
               fontSize: 15,
               marginBottom: 20,
             }}
@@ -132,13 +132,13 @@ export default function SettingsScreen() {
             onPress={handleSaveAndLogin}
             disabled={busy}
             style={{
-              backgroundColor: busy ? 'colors.accentDark' : '#537d96',
+              backgroundColor: busy ? colors.accentDark : '#537d96',
               borderRadius: 6,
               paddingVertical: 12,
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: 'colors.text', fontSize: 15 }}>
+            <Text style={{ color: colors.text, fontSize: 15 }}>
               {busy ? '连接中…' : '保存并登录'}
             </Text>
           </TouchableOpacity>

@@ -170,11 +170,11 @@ export default function LibraryScreen() {
           paddingBottom: 10,
         }}
       >
-        <Text style={{ color: 'colors.text', fontSize: 22, fontWeight: '600' }}>
+        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '600' }}>
           星辰云图书馆
         </Text>
         <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-          <Text style={{ color: 'colors.accent', fontSize: 16 }}>设置</Text>
+          <Text style={{ color: colors.accent, fontSize: 16 }}>设置</Text>
         </TouchableOpacity>
       </View>
 
@@ -196,7 +196,7 @@ export default function LibraryScreen() {
               await reload();
               setRefreshing(false);
             }}
-            tintColor="colors.accent"
+            tintColor={colors.accent}
           />
         }
         renderItem={({ item }) => (
@@ -208,7 +208,7 @@ export default function LibraryScreen() {
               paddingVertical: 14,
               paddingHorizontal: 16,
               borderBottomWidth: 0.5,
-              borderBottomColor: 'colors.border',
+              borderBottomColor: colors.border,
             }}
           >
             <View
@@ -216,26 +216,26 @@ export default function LibraryScreen() {
                 width: 44,
                 height: 44,
                 borderRadius: 4,
-                backgroundColor: item.badge === '+' ? 'colors.card' : FILE_TYPE_COLOR[item.badge ?? ''] ?? 'colors.card',
+                backgroundColor: item.badge === '+' ? colors.card : FILE_TYPE_COLOR[item.badge ?? ''] ?? colors.card,
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginRight: 12,
               }}
             >
-              <Text style={{ color: 'colors.text', fontSize: item.badge === '+' ? 24 : 11, fontWeight: '600' }}>
+              <Text style={{ color: colors.text, fontSize: item.badge === '+' ? 24 : 11, fontWeight: '600' }}>
                 {item.badge}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: 'colors.text', fontSize: 15 }} numberOfLines={1}>
+              <Text style={{ color: colors.text, fontSize: 15 }} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text style={{ color: 'colors.textMuted', fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
                 {item.subtitle}
               </Text>
             </View>
             {item.progressText && (
-              <Text style={{ color: 'colors.textMuted', fontSize: 12, marginRight: 8 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginRight: 8 }}>
                 {item.progressText}
               </Text>
             )}
@@ -244,13 +244,13 @@ export default function LibraryScreen() {
                 onPress={() => handleDownload(item.cloudItem!)}
                 style={{
                   borderWidth: 1,
-                  borderColor: 'colors.accentDark',
+                  borderColor: colors.accentDark,
                   borderRadius: 4,
                   paddingHorizontal: 10,
                   paddingVertical: 4,
                 }}
               >
-                <Text style={{ color: 'colors.accent', fontSize: 12 }}>下载</Text>
+                <Text style={{ color: colors.accent, fontSize: 12 }}>下载</Text>
               </TouchableOpacity>
             )}
             {item.cloudItem && item.downloaded && (
@@ -259,7 +259,7 @@ export default function LibraryScreen() {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <Text style={{ color: 'colors.textMuted', textAlign: 'center', marginTop: 48 }}>
+          <Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: 48 }}>
             还没有藏书，点上面「导入」添加第一本。
           </Text>
         }

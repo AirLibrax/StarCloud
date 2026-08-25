@@ -38,10 +38,10 @@ export default function LoginScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', padding: 24 }}>
-      <Text style={{ color: 'colors.text', fontSize: 22, fontWeight: '600', marginBottom: 4 }}>
+      <Text style={{ color: colors.text, fontSize: 22, fontWeight: '600', marginBottom: 4 }}>
         重新登录
       </Text>
-      <Text style={{ color: 'colors.textMuted', fontSize: 13, marginBottom: 20 }}>
+      <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 20 }}>
         访问令牌已失效，请重新登录云端书架
       </Text>
       <TextInput
@@ -51,11 +51,11 @@ export default function LoginScreen() {
         placeholderTextColor="#5a534a"
         autoCapitalize="none"
         style={{
-          backgroundColor: 'colors.card',
+          backgroundColor: colors.card,
           borderRadius: 6,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          color: 'colors.text',
+          color: colors.text,
           fontSize: 15,
           marginBottom: 12,
         }}
@@ -67,11 +67,11 @@ export default function LoginScreen() {
         placeholderTextColor="#5a534a"
         secureTextEntry
         style={{
-          backgroundColor: 'colors.card',
+          backgroundColor: colors.card,
           borderRadius: 6,
           paddingVertical: 10,
           paddingHorizontal: 12,
-          color: 'colors.text',
+          color: colors.text,
           fontSize: 15,
           marginBottom: 16,
         }}
@@ -83,13 +83,13 @@ export default function LoginScreen() {
         onPress={handleLogin}
         disabled={busy}
         style={{
-          backgroundColor: busy ? 'colors.accentDark' : '#537d96',
+          backgroundColor: busy ? colors.accentDark : '#537d96',
           borderRadius: 6,
           paddingVertical: 12,
           alignItems: 'center',
         }}
       >
-        <Text style={{ color: 'colors.text', fontSize: 15 }}>{busy ? '登录中…' : '登录'}</Text>
+        <Text style={{ color: colors.text, fontSize: 15 }}>{busy ? '登录中…' : '登录'}</Text>
       </TouchableOpacity>
     </View>
   );
