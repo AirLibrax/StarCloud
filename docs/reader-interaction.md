@@ -20,14 +20,14 @@
 
 ## 二、翻页方式行为定义
 
-### 点击翻页（tap）
+### 点击翻页（tap，默认翻页方式）
 
 - 书页 iframe 设 pointer-events:none（CSS .no-pointer），
   所有点击落在阅读器外层容器，由 shared 的 `tapZoneAction()` 统一判定；
 - 屏幕左右两半分区：左半 = 上一页，右半 = 下一页；
-- **子选项「翻页方向」（SwipeDirection）**：
-  - left-next（默认）：向左下一页 → 左半屏点击 = 下一页；
-  - right-next：向右下一页 → 右半屏点击 = 下一页（镜像）；
+- **子选项「翻页方向」（SwipeDirection，默认 right-next）**：
+  - right-next（默认）：向右下一页 → 右半屏点击 = 下一页；
+  - left-next：向左下一页 → 左半屏点击 = 下一页（镜像）；
 - 引擎收不到任何指针事件，天然无双重点击。
 
 ### 滑动翻页（swipe）
@@ -108,10 +108,10 @@ Web localStorage 键名（App AsyncStorage 一一对应）：
 | starcloud.fontStep | 字号档位序号 |
 | starcloud.lineHeight | 行距档位序号 |
 | starcloud.margin | 边距档位序号 |
-| starcloud.pageMode | 'tap' \| 'swipe' |
+| starcloud.pageMode | 'tap'（默认）\| 'swipe' |
 | starcloud.swipeLayout | 'horizontal' \| 'vertical' |
 | starcloud.verticalStyle | 'continuous' \| 'paged'（仅上下滑动时有意义） |
-| starcloud.swipeDirection | 'left-next' \| 'right-next' |
+| starcloud.swipeDirection | 'right-next'（默认）\| 'left-next' |
 | starcloud.spreadTwoUp | 'single' \| 'two-up' |
 
 进度上报：章节变化才上报，3s 防抖；

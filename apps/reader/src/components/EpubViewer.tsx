@@ -56,10 +56,11 @@ function readVerticalStyle(): VerticalStyle {
   return localStorage.getItem(VSTYLE_KEY) === 'paged' ? 'paged' : 'continuous';
 }
 
+/** 无存储时默认向右下一页（right-next）；已保存 left-next 的用户保持不变 */
 function readDirection(): SwipeDirection {
-  return localStorage.getItem(DIR_KEY) === 'right-next'
-    ? 'right-next'
-    : 'left-next';
+  return localStorage.getItem(DIR_KEY) === 'left-next'
+    ? 'left-next'
+    : 'right-next';
 }
 
 /** 单列/双列偏好（是否实际生效还受视口宽度与设备能力约束，见 twoUp） */

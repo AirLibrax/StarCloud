@@ -40,7 +40,7 @@ const DEFAULTS: ReadingPrefs = {
   pageMode: 'tap',
   swipeLayout: 'horizontal',
   verticalStyle: 'continuous',
-  swipeDirection: 'left-next',
+  swipeDirection: 'right-next',
   spreadTwoUp: 'two-up',
 };
 
