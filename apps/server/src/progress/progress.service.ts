@@ -22,10 +22,14 @@ export class ProgressService {
       throw new NotFoundException('书籍不存在');
     }
 
+    /* 客户端百分比仅在接受有效正数时使用：epubjs 未生成 locations 时可能上报 0，
+       照收会把真实进度覆盖成 0%；否则回退章节粒度计算 */
     const percentage =
-      dto.totalPages > 0
-        ? Math.min(100, Math.round((dto.currentPage / dto.totalPages) * 1000) / 10)
-        : 0;
+      typeof dto.percentage === 'number' && dto.percentage > 0
+        ? Math.min(100, Math.round(dto.percentage * 10) / 10)
+        : dto.totalPages > 0
+          ? Math.min(100, Math.round((dto.currentPage / dto.totalPages) * 1000) / 10)
+          : 0;
 
     if (dto.currentPage > dto.totalPages) {
       throw new BadRequestException('当前页不能大于总页数');
@@ -38,12 +42,14 @@ export class ProgressService {
         bookId: dto.bookId,
         currentPage: dto.currentPage,
         totalPages: dto.totalPages,
+        position: dto.position ?? null,
         percentage,
       },
       update: {
         currentPage: dto.currentPage,
         totalPages: dto.totalPages,
         percentage,
+        position: dto.position ?? null,
       },
     });
 
@@ -54,6 +60,7 @@ export class ProgressService {
       totalPages: progress.totalPages,
       percentage: progress.percentage,
       updatedAt: progress.updatedAt.toISOString(),
+      position: progress.position,
     };
   }
 
@@ -75,6 +82,7 @@ export class ProgressService {
               currentPage: p.currentPage,
               totalPages: p.totalPages,
               percentage: p.percentage,
+              position: p.position,
               updatedAt: p.updatedAt.toISOString(),
             }
           : null,

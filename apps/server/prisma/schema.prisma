@@ -53,6 +53,7 @@ model ReadingProgress {
   currentPage Int      @default(0)
   totalPages  Int      @default(0)
   percentage  Float    @default(0)
+  position    String?
   updatedAt   DateTime @updatedAt
   userId      Int
   bookId      Int

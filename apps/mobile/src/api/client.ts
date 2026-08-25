@@ -128,11 +128,13 @@ export async function reportProgress(
   bookId: number,
   currentPage: number,
   totalPages: number,
+  position?: string | null,
+  percentage?: number,
 ): Promise<void> {
   try {
     await api('/api/progress', {
       method: 'POST',
-      body: JSON.stringify({ bookId, currentPage, totalPages }),
+      body: JSON.stringify({ bookId, currentPage, totalPages, position, percentage }),
     });
   } catch {
     // 进度上报失败不打断阅读

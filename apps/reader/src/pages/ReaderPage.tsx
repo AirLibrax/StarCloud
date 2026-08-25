@@ -18,12 +18,16 @@ export default function ReaderPage() {
   const { bookId } = useParams<{ bookId: string }>();
   const [book, setBook] = useState<Book | null>(null);
   const [progress, setProgress] = useState<ReadingProgress | null>(null);
+  /* 书架进度是否已拉回：EPUB 恢复依赖 initialCfi，
+     必须等 progress 就位后再挂载 EpubViewer，否则组件会在 cfi=undefined 时
+     初始化并打开第一章，后续到达的 cfi 无法生效（竞态） */
+  const [shelfLoaded, setShelfLoaded] = useState(false);
   const [txtContent, setTxtContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const reportProgress = useCallback(
-    async (currentPage: number, totalPages: number) => {
+    async (currentPage: number, totalPages: number, position?: string | null, percentage?: number) => {
       if (!bookId) return;
       try {
         await api<ReadingProgress>('/api/progress', {
@@ -33,6 +37,8 @@ export default function ReaderPage() {
             bookId: Number(bookId),
             currentPage,
             totalPages,
+            position,
+            percentage,
           } satisfies UpdateProgressRequest),
         });
       } catch {
@@ -44,19 +50,26 @@ export default function ReaderPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setShelfLoaded(false);
     async function load() {
       try {
         const book = await api<Book>(`/api/books/${bookId}`);
         if (cancelled) return;
         setBook(book);
 
-        const shelf = await api<
-          { book: Book; progress: ReadingProgress | null }[]
-        >('/api/shelf');
+        let foundProgress: ReadingProgress | null = null;
+        try {
+          const shelf = await api<
+            { book: Book; progress: ReadingProgress | null }[]
+          >('/api/shelf');
+          if (cancelled) return;
+          foundProgress = shelf.find((i) => i.book.id === book.id)?.progress ?? null;
+        } catch (shelfErr) {
+          console.warn('shelf 拉取失败，按无进度打开', shelfErr);
+        }
         if (cancelled) return;
-        setProgress(
-          shelf.find((i) => i.book.id === book.id)?.progress ?? null,
-        );
+        setProgress(foundProgress);
+        setShelfLoaded(true);
 
         if (book.fileType === 'txt') {
           const res = await fetch(
@@ -102,10 +115,47 @@ export default function ReaderPage() {
   }
 
   const reportTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  function scheduleReport(page: number, total: number) {
-    clearTimeout(reportTimer.current);
-    reportTimer.current = setTimeout(() => reportProgress(page, total), 3000);
+  /** 最新待上报进度；防抖窗口内退出/关页时由 flush 立即发出 */
+  const latestReport = useRef<{ page: number; total: number; position?: string | null; percentage?: number } | null>(null);
+  function doReport() {
+    if (reportTimer.current) {
+      clearTimeout(reportTimer.current);
+      reportTimer.current = undefined;
+    }
+    const lp = latestReport.current;
+    if (!lp || !bookId) return;
+    latestReport.current = null;
+    reportProgress(lp.page, lp.total, lp.position, lp.percentage);
   }
+  function scheduleReport(page: number, total: number, position?: string | null, percentage?: number) {
+    latestReport.current = { page, total, position, percentage };
+    clearTimeout(reportTimer.current);
+    reportTimer.current = setTimeout(doReport, 3000);
+  }
+  // 退出阅读器（路由切走）或关闭标签页时立即上报最后位置；
+  // 关页场景用 keepalive fetch 保证请求不被浏览器随页面终止而取消
+  useEffect(() => {
+    const flush = () => {
+      const lp = latestReport.current;
+      if (!lp || !bookId) return;
+      latestReport.current = null;
+      fetch('/api/progress', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ bookId: Number(bookId), currentPage: lp.page, totalPages: lp.total, position: lp.position, percentage: lp.percentage } satisfies UpdateProgressRequest),
+      }).catch(() => {});
+    };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+        if (reportTimer.current) {
+          clearTimeout(reportTimer.current);
+          reportTimer.current = undefined;
+        }
+      flush();
+    };
+  }, [bookId]);
 
   /** TXT 恢复到上次阅读位置 */
   useEffect(() => {
@@ -161,21 +211,23 @@ export default function ReaderPage() {
         />
       )}
 
-      {book?.fileType === 'epub' && (
+      {book?.fileType === 'epub' && shelfLoaded && (
         <EpubViewer
           bookId={book.id}
           initialPercentage={progress?.percentage ?? 0}
-          onProgress={(page, total) => {
-            const pct = Math.round((page / total) * 1000) / 10;
+          initialCfi={progress?.position ?? undefined}
+          onProgress={(page, total, position, percentage) => {
+            const pct = percentage ?? Math.round((page / total) * 1000) / 10;
             setProgress((p) => ({
               id: p?.id ?? 0,
               bookId: book.id,
               currentPage: page,
               totalPages: total,
               percentage: pct,
+              position: position ?? null,
               updatedAt: p?.updatedAt ?? '',
             }));
-            scheduleReport(page, total);
+            scheduleReport(page, total, position, pct);
           }}
         />
       )}

@@ -18,8 +18,10 @@ interface Props {
   bookId: number;
   /** 上次阅读的百分比 0-100，用于恢复位置 */
   initialPercentage: number;
+  /** EPUB 精确书签（CFI），存在时优先精确恢复 */
+  initialCfi?: string | null;
   /** 进度变化回调（章节号），父组件负责防抖上报 */
-  onProgress: (currentPage: number, totalPages: number) => void;
+  onProgress: (currentPage: number, totalPages: number, position?: string | null, percentage?: number) => void;
 }
 
 /* ---------------- 偏好持久化（键名与冻结规格第六节一致） ---------------- */
@@ -110,6 +112,7 @@ function modeLabel(m: PageMode): string {
 export default function EpubViewer({
   bookId,
   initialPercentage,
+  initialCfi,
   onProgress,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -120,6 +123,7 @@ export default function EpubViewer({
 
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [page, setPage] = useState({ current: 0, total: 0 });
   const [chapter, setChapter] = useState({ current: 0, total: 0 });
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -184,8 +188,11 @@ export default function EpubViewer({
   swipeDirRef.current = swipeDir;
   twoUpRef.current = twoUp;
   const lastSpineIdxRef = useRef<number | null>(null);
+  const lastCfiRef = useRef<string | null>(null);
   /** 进度上报守卫：章节变化才报（防抖在父组件） */
   const lastReportedIdxRef = useRef<number | null>(null);
+  const lastReportedCfiRef = useRef<string | null>(null);
+const locationsReadyRef = useRef<unknown>(null);
   /** 会话位置所属的书（换书时重置 lastSpineIdxRef/lastReportedIdxRef） */
   const sessionBookRef = useRef<number | null>(null);
 
@@ -273,7 +280,10 @@ export default function EpubViewer({
     if (sessionBookRef.current !== bookId) {
       sessionBookRef.current = bookId;
       lastSpineIdxRef.current = null;
+      lastCfiRef.current = null;
       lastReportedIdxRef.current = null;
+      lastReportedCfiRef.current = null;
+      locationsReadyRef.current = null;
     }
 
     const container = containerRef.current;
@@ -344,12 +354,50 @@ export default function EpubViewer({
 
         function onRelocated(location: any) {
           const idx = location?.start?.index ?? 0;
+          const cfi = location?.start?.cfi ?? null;
+          const rawPercentage = location?.start?.percentage;
+          /* 仅接受有效正数：epubjs 未生成 locations 时可能为 0，照收会把真实进度覆盖成 0% */
+          const percentage =
+            typeof rawPercentage === 'number' && rawPercentage > 0
+              ? Math.min(100, Math.round((rawPercentage > 1 ? rawPercentage : rawPercentage * 100) * 10) / 10)
+              : undefined;
           lastSpineIdxRef.current = idx;
+          lastCfiRef.current = cfi;
+          const displayed = location?.start?.displayed;
           setChapter({ current: idx + 1, total: totalChapters });
-          // 章节变化才报进度（连续滚动模式下 relocated 高频触发，避免上报风暴）
-          if (lastReportedIdxRef.current !== idx) {
+          const validDisplayed = displayed && displayed.page ? displayed : null;
+          setPage(
+            validDisplayed
+              ? { current: validDisplayed.page, total: validDisplayed.total }
+              : { current: 0, total: 0 },
+          );
+          // 首次 relocated 后惰性生成 locations；生成完成前 percentage 保持 undefined，
+          // 后续 relocated 会自动携带有效全书百分比
+          if (locationsReadyRef.current !== ebook && ebook?.locations) {
+            /* flag 绑书籍实例：rebuildTick 重建（切排版/翻页方式）会新建 ePub 实例，
+               新实例 locations 为空，必须重新生成，否则百分比静默退回章节粒度 */
+            locationsReadyRef.current = ebook;
+            const runGenerate = () => {
+              try {
+                ebook.locations?.generate?.(1024)?.catch?.(() => {});
+              } catch {
+                // 后台生成失败不影响阅读
+              }
+            };
+            if (typeof window.requestIdleCallback === 'function') {
+              window.requestIdleCallback(runGenerate, { timeout: 2000 });
+            } else {
+              setTimeout(runGenerate, 0);
+            }
+          }
+          // 章节或 CFI 变化才报进度（连续滚动模式下 relocated 高频触发，避免上报风暴）
+          if (
+            lastReportedIdxRef.current !== idx ||
+            lastReportedCfiRef.current !== cfi
+          ) {
             lastReportedIdxRef.current = idx;
-            onProgress(idx + 1, totalChapters);
+            lastReportedCfiRef.current = cfi;
+            onProgress(idx + 1, totalChapters, cfi, percentage);
           }
           applyFontSize(fontSizeRef.current);
           applyLineHeight();
@@ -363,8 +411,8 @@ export default function EpubViewer({
         if (cancelled) return;
         totalChapters = ((ebook.spine as any)?.items as any[])?.length ?? 0;
 
-        // 优先回到本会话内上次所在章节，其次按历史百分比（规格六）；
-        // 章节序号一律钳制在有效范围内，防止换书后越界
+        // 优先用精确 CFI 恢复（服务端书签或本会话最新位置），
+        // 失败/缺失时回退到本会话章节序号或历史百分比（规格六）
         const startIdx =
           lastSpineIdxRef.current != null
             ? Math.min(lastSpineIdxRef.current, totalChapters - 1)
@@ -372,8 +420,17 @@ export default function EpubViewer({
                 totalChapters - 1,
                 Math.floor((initialPercentage / 100) * totalChapters),
               );
-
-        await localRendition.display(startIdx > 0 ? startIdx : undefined);
+        const restoreCfi = lastCfiRef.current ?? initialCfi ?? null;
+        if (restoreCfi) {
+          try {
+            await localRendition.display(restoreCfi);
+          } catch (err) {
+            console.warn('[EpubViewer] CFI restore failed, fallback to spine index', err);
+            await localRendition.display(startIdx > 0 ? startIdx : undefined);
+          }
+        } else {
+          await localRendition.display(startIdx > 0 ? startIdx : undefined);
+        }
         if (cancelled) return;
         applyDocHandlersRef.current();
         setReady(true);
@@ -669,7 +726,7 @@ export default function EpubViewer({
             (!ready
               ? '打开中…'
               : chapter.total > 0
-                ? `${chapter.current}/${chapter.total} 章`
+                ? `第 ${chapter.current}/${chapter.total} 章${page.total > 0 ? ` · 本章 ${page.current}/${page.total} 页` : ''}`
                 : '')}
         </span>
         <div className="toolbar-right">

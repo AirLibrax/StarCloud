@@ -43,11 +43,11 @@ const TXT_SCROLL_HEIGHT_FACTOR = 1.5;
 export default function ReaderScreen() {
   const navigation = useNavigation();
   const route = useRoute<Route>();
-  const { title, fileType, source, bookId, localId, initialPercentage } =
+  const { title, fileType, source, bookId, localId, initialPercentage, initialCfi } =
     route.params;
   const [prefs, setPrefs] = useState(getReadingPrefs());
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [pageInfo, setPageInfo] = useState<{ page: number; total: number } | null>(null);
+  const [pageInfo, setPageInfo] = useState<{ page: number; total: number; chapter?: number; chapterTotal?: number } | null>(null);
 
   /** 窗口尺寸（旋转时更新；逻辑像素，与 Web 端 SPREAD_MIN_WIDTH 同单位） */
   const { width, height } = useWindowDimensions();
@@ -63,21 +63,39 @@ export default function ReaderScreen() {
     updateReadingPrefs(patch).then(() => setPrefs(getReadingPrefs()));
   }
 
-  // 进度上报（防抖 3s，章节/页变化才报，静默失败），本地书与云端书共用
+  // 进度上报（防抖 3s，章节/页变化才报，静默失败），本地书与云端书共用；
+  // 退出阅读页时立即 flush 最后位置，避免「翻完就退」把最后一条进度丢在防抖窗口里
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestProgress = useRef<{ page: number; total: number; position?: string | null; percentage?: number } | null>(null);
+  const flushProgress = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    const lp = latestProgress.current;
+    if (!lp) return;
+    latestProgress.current = null;
+    if (source === 'cloud' && bookId != null) {
+      reportProgress(bookId, lp.page, lp.total, lp.position, lp.percentage);
+    } else if (source === 'local' && localId != null) {
+      saveLocalProgress(localId, lp.page, lp.total, lp.position, lp.percentage);
+    }
+  }, [source, bookId, localId]);
+  useEffect(() => flushProgress, [flushProgress]);
   const onProgress = useCallback(
-    (currentPage: number, totalPages: number) => {
-      setPageInfo({ page: currentPage, total: totalPages });
+    (currentPage: number, totalPages: number, position?: string | null, displayed?: { page: number; total: number } | null, percentage?: number) => {
+      setPageInfo(
+        displayed && displayed.page
+          ? { page: displayed.page, total: displayed.total, chapter: currentPage, chapterTotal: totalPages }
+          : fileType === 'epub'
+            ? { page: 0, total: 0, chapter: currentPage, chapterTotal: totalPages }
+            : { page: currentPage, total: totalPages },
+      );
+      latestProgress.current = { page: currentPage, total: totalPages, position, percentage };
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        if (source === 'cloud' && bookId != null) {
-          reportProgress(bookId, currentPage, totalPages);
-        } else if (source === 'local' && localId != null) {
-          saveLocalProgress(localId, currentPage, totalPages);
-        }
-      }, 3000);
+      timer.current = setTimeout(flushProgress, 3000);
     },
-    [source, bookId, localId],
+    [flushProgress, fileType],
   );
 
   return (
@@ -284,6 +302,7 @@ export default function ReaderScreen() {
           bookId={bookId}
           localId={localId}
           initialPercentage={initialPercentage}
+          initialCfi={initialCfi}
           prefs={prefs}
           twoUp={twoUp}
           onProgress={onProgress}
@@ -303,7 +322,12 @@ export default function ReaderScreen() {
           }}
         >
           <Text style={{ color: colors.textMuted, fontSize: 12, backgroundColor: 'rgba(251,247,238,0.85)', paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 }}>
-            {pageInfo.page}/{pageInfo.total} 页
+            {pageInfo.chapter && pageInfo.chapterTotal
+              ? `第 ${pageInfo.chapter}/${pageInfo.chapterTotal} 章`
+              : ''}
+            {pageInfo.page > 0 && pageInfo.total > 0
+              ? `${pageInfo.chapter && pageInfo.chapterTotal ? ' · ' : ''}${pageInfo.page}/${pageInfo.total} 页`
+              : ''}
           </Text>
         </View>
       )}
@@ -400,6 +424,7 @@ function EpubLoader({
   bookId,
   localId,
   initialPercentage,
+  initialCfi,
   prefs,
   twoUp,
   onProgress,
@@ -407,11 +432,12 @@ function EpubLoader({
   source: 'cloud' | 'local';
   bookId?: number;
   localId?: string;
+  initialCfi?: string | null;
   initialPercentage: number;
   prefs: ReadingPrefs;
   /** 实际生效的双列（父组件已按 偏好 ∩ 横屏≥768 ∩ 非上下滑动 算好） */
   twoUp: boolean;
-  onProgress: (page: number, total: number) => void;
+  onProgress: (page: number, total: number, position?: string | null, displayed?: { page: number; total: number } | null, percentage?: number) => void;
 }) {
   const [fileUri, setFileUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -454,6 +480,7 @@ function EpubLoader({
       fileUri={fileUri}
       bookKey={`b${bookId ?? localId}`}
       initialPercentage={initialPercentage}
+      initialCfi={initialCfi}
       prefs={prefs}
       twoUp={twoUp}
       onProgress={onProgress}
@@ -465,17 +492,19 @@ function EpubPane({
   fileUri,
   bookKey,
   initialPercentage,
+  initialCfi,
   prefs,
   twoUp,
   onProgress,
 }: {
   fileUri: string;
   bookKey: string;
+  initialCfi?: string | null;
   initialPercentage: number;
   prefs: ReadingPrefs;
   /** 实际生效的双列（父组件已按 偏好 ∩ 横屏≥768 ∩ 非上下滑动 算好） */
   twoUp: boolean;
-  onProgress: (page: number, total: number) => void;
+  onProgress: (page: number, total: number, position?: string | null, displayed?: { page: number; total: number } | null, percentage?: number) => void;
 }) {
   const webRef = useRef<WebView>(null);
   const [html, setHtml] = useState<string | null>(null);
@@ -485,9 +514,11 @@ function EpubPane({
   const readyRef = useRef(false);
   /** 最近上报的 spine 章节索引（spread 原地重排失败重建时用于恢复位置） */
   const lastIdxRef = useRef<number | null>(null);
+  /** 最近上报的 CFI（重建 WebView 时优先精确恢复） */
+  const lastCfiRef = useRef<string | null>(null);
 
   /** 生成阅读页 HTML（restoreIdx 非空时按 spine 索引恢复位置，否则按 initialPercentage） */
-  async function buildHtml(restoreIdx: number | null): Promise<string> {
+  async function buildHtml(restoreIdx: number | null, restoreCfi?: string | null): Promise<string> {
     return buildOfflineEpubHtml({
       fileUri,
       initialPercentage,
@@ -499,6 +530,7 @@ function EpubPane({
       verticalStyle: prefs.verticalStyle,
       twoUp,
       restoreIndex: restoreIdx ?? undefined,
+      restoreCfi: restoreCfi ?? initialCfi ?? undefined,
     });
   }
 
@@ -536,7 +568,7 @@ function EpubPane({
       firstStyle.current = false;
       return;
     }
-    buildHtml(null).then((h) => {
+    buildHtml(lastIdxRef.current, lastCfiRef.current).then((h) => {
       if (!cancelledRef.current) applyHtml(h);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -590,7 +622,8 @@ function EpubPane({
       }
       if (msg.t === 'progress') {
         lastIdxRef.current = msg.page - 1;
-        onProgress(msg.page, msg.total);
+        lastCfiRef.current = msg.cfi ?? null;
+        onProgress(msg.page, msg.total, msg.cfi, msg.displayed ?? null, msg.percentage ?? undefined);
       }
       if (msg.t === 'ready') {
         readyRef.current = true;
@@ -602,10 +635,14 @@ function EpubPane({
       }
       if (msg.t === 'spread-failed') {
         // 原地重排在 WebView 中不可靠：退化为重建 WebView，并按当前章节索引恢复位置
-        buildHtml(lastIdxRef.current).then((h) => {
+        buildHtml(lastIdxRef.current, lastCfiRef.current).then((h) => {
           if (!cancelledRef.current) applyHtml(h);
         });
       }
+      if (msg.t === 'nav-error') {
+        console.warn('WebView non-fatal error', msg.message);
+      }
+      /* CFI restore failed is reported by the shell page as nav-error (prefix: restore cfi failed); no separate branch needed */
       if (msg.t === 'error') setError(msg.message);
       // 手势桥接：桥接 JS 只报原始手势，语义判定统一在 RN 侧（消费 shared 模型）
       if (msg.t === 'tap') {

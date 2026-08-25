@@ -22,6 +22,7 @@ export interface LocalBook {
     currentPage: number;
     totalPages: number;
     percentage: number;
+    position?: string | null;
   } | null;
 }
 
@@ -190,15 +191,20 @@ export async function saveLocalProgress(
   id: string,
   currentPage: number,
   totalPages: number,
+  position?: string | null,
+  percentage?: number,
 ): Promise<void> {
   const books = await listLocalBooks();
   const idx = books.findIndex((b) => b.id === id);
   if (idx === -1) return;
-  books[idx].progress = {
-    currentPage,
-    totalPages,
-    percentage:
-      totalPages > 0 ? Math.min(100, Math.round((currentPage / totalPages) * 1000) / 10) : 0,
-  };
-  await saveList(books);
-}
+    books[idx].progress = {
+      currentPage,
+      totalPages,
+      percentage:
+        typeof percentage === 'number' && percentage > 0
+          ? Math.min(100, Math.round(percentage * 10) / 10)
+          : totalPages > 0 ? Math.min(100, Math.round((currentPage / totalPages) * 1000) / 10) : 0,
+      position: position ?? null,
+    };
+    await saveList(books);
+  }

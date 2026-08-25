@@ -68,6 +68,7 @@ export default function LibraryScreen() {
           source: 'local',
           localId: book.id,
           initialPercentage: book.progress?.percentage ?? 0,
+          initialCfi: book.progress?.position ?? undefined,
         });
       }
     } catch (err) {
@@ -90,6 +91,7 @@ export default function LibraryScreen() {
       fileType: item.book.fileType,
       source: 'cloud',
       bookId: item.book.id,
+      initialCfi: item.progress?.position ?? undefined,
       initialPercentage: item.progress?.percentage ?? 0,
     });
   }
@@ -116,6 +118,7 @@ export default function LibraryScreen() {
       title: book.volume != null ? `${book.title} 第${book.volume}卷` : book.title,
       fileType: book.fileType,
       source: 'local',
+      initialCfi: book.progress?.position ?? undefined,
       localId: book.id,
       initialPercentage: book.progress?.percentage ?? 0,
     });

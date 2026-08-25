@@ -1,4 +1,4 @@
-import { IsInt, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateProgressDto {
   @IsInt()
@@ -11,4 +11,14 @@ export class UpdateProgressDto {
   @Min(1)
   @IsInt()
   totalPages!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  position?: string | null;
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percentage?: number;
 }

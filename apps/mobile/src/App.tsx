@@ -27,6 +27,8 @@ export type RootStackParamList = {
     bookId?: number;
     localId?: string;
     initialPercentage: number;
+    /** EPUB 精确书签（CFI），存在时优先恢复 */
+    initialCfi?: string | null;
   };
 };
 

@@ -72,6 +72,8 @@ export interface OfflineReaderOptions {
   twoUp: boolean;
   /** 可选：重建 WebView 时恢复到的 spine 章节索引（缺省按 initialPercentage 恢复） */
   restoreIndex?: number;
+  /** 可选：EPUB 精确书签（CFI），优先于 restoreIndex 恢复 */
+  restoreCfi?: string;
 }
 
 /**
@@ -114,7 +116,9 @@ ${needsBridge ? '.sc-no-pointer #viewer,.sc-no-pointer #viewer iframe{pointer-ev
 <script>${safeEpub}</script>
 <script>
 window.onerror = function(msg, src, line) {
-  window.ReactNativeWebView.postMessage(JSON.stringify({ t: "error", message: msg + " @" + line }));
+  /* 就绪后的未捕获错误多为引擎内部偶发抖动，降级为 nav-error 只记日志，
+     避免非致命抖动把整个阅读页替换成错误视图；未就绪时的错误才是致命的（书打不开） */
+  post({ t: window.__ready ? 'nav-error' : 'error', message: msg + " @" + line });
   return false;
 };
 window.__initialPct = ${opts.initialPercentage};
@@ -125,13 +129,23 @@ window.__swipeLayout = "${opts.swipeLayout}";
 window.__verticalStyle = "${opts.verticalStyle}";
 window.__twoUp = ${opts.twoUp};
 window.__restoreIndex = ${opts.restoreIndex ?? -1};
+window.__restoreCfi = ${JSON.stringify(opts.restoreCfi ?? null).replace(/</g, '\\u003c')};
 function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__chunks = [];
 window.__pushChunk = function(c) { window.__chunks.push(c); };
+/* 书完全打开（display 完成）前置 true；此前翻页指令一律忽略。
+   renderTo 返回即有 __rendition，但其内部 manager 视图未就绪时调
+   next()/prev() 会在引擎内抛 reading 'next' 类竞态错误 */
+window.__ready = false;
 /* 翻页执行入口：由 RN 手势桥接消息驱动（postMessage → RN 判定 → 回注本函数） */
 window.__scNav = function(d) {
-  if (!window.__rendition) return;
-  if (d === 'next') window.__rendition.next(); else window.__rendition.prev();
+  if (!window.__rendition || !window.__ready) return;
+  try {
+    if (d === 'next') window.__rendition.next(); else window.__rendition.prev();
+  } catch (e) {
+    /* 章节切换瞬间的偶发竞态：吞掉并上报，不让 WebView 白屏 */
+    post({ t: 'nav-error', message: String(e && e.message || e) });
+  }
 };
 /* 单双列热切换入口：RN 在旋转/偏好变化时回注（injectJavaScript），
    rendition.spread() 原地重排，不重建 WebView（与 Web EpubViewer 同路径）。
@@ -218,18 +232,63 @@ window.__openBook = function() {
         post({ t: 'tap', x: cx });
       }
     }, { passive: true });
-    // 章节变化才报进度（防抖在 RN 侧）
+    // 章节或 CFI 变化才报进度（防抖在 RN 侧）
     var lastIdx = -1;
+    var lastCfi = null;
+    var locationsStarted = false;
     rendition.on('relocated', function(loc) {
       var total = book.spine.items.length;
       var idx = loc.start ? loc.start.index : 0;
-      if (idx === lastIdx) return;
+      var cfi = loc.start ? (loc.start.cfi || null) : null;
+      var displayed = loc.start ? loc.start.displayed : null;
+      var rawPct = loc.start ? loc.start.percentage : null;
+      /* 仅接受有效正数：epubjs 未生成 locations 时 start.percentage 可能为 0，
+         若照收会把真实进度覆盖成 0%（null 时后端回退章节粒度计算） */
+      var pct = typeof rawPct === 'number' && rawPct > 0
+        ? Math.min(100, Math.round((rawPct > 1 ? rawPct : rawPct * 100) * 10) / 10)
+        : null;
+      if (idx === lastIdx && cfi === lastCfi) return;
       lastIdx = idx;
-      post({ t: 'progress', page: idx + 1, total: total });
+      lastCfi = cfi;
+      post({
+        t: 'progress',
+        page: idx + 1,
+        total: total,
+        cfi: cfi,
+        percentage: pct,
+        displayed: displayed && displayed.page ? { page: displayed.page, total: displayed.total } : null
+      });
+      if (!locationsStarted && book.locations) {
+        locationsStarted = true;
+        setTimeout(function() {
+          try {
+            book.locations.generate(1024)['catch'](function(e) {
+              post({ t: 'nav-error', message: 'locations generate failed: ' + String(e && e.message || e) });
+            });
+          } catch (e) {
+            post({ t: 'nav-error', message: 'locations generate failed: ' + String(e && e.message || e) });
+          }
+        }, 0);
+      }
     });
     book.ready.then(function() {
       var t = book.spine.items.length;
-      // 重建恢复优先用注入的 spine 索引（保持当前章节位置），否则按历史百分比
+      if (window.__restoreCfi) {
+        var fallbackIdx = window.__restoreIndex >= 0
+          ? Math.min(window.__restoreIndex, t - 1)
+          : Math.min(t - 1, Math.floor(window.__initialPct / 100 * t));
+        return rendition.display(window.__restoreCfi).then(function(loc) {
+          /* 二次校准：首次 display 后主题注入/字号重排会打乱 paginated 偏移，
+             视觉上停在目标位置前一屏（上一章末尾）；重放同一 CFI 修正 */
+          return rendition.display(window.__restoreCfi).catch(function(e) {
+            post({ t: 'nav-error', message: 'second-pass calibrate failed: ' + String(e && e.message || e) });
+            return loc;
+          });
+        }).catch(function(e) {
+          post({ t: 'nav-error', message: 'restore cfi failed: ' + String(e && e.message || e) });
+          return rendition.display(fallbackIdx > 0 ? fallbackIdx : 0);
+        });
+      }
       var start = window.__restoreIndex >= 0
         ? Math.min(window.__restoreIndex, t - 1)
         : Math.min(t - 1, Math.floor(window.__initialPct / 100 * t));
@@ -241,6 +300,7 @@ window.__openBook = function() {
         window.__pendingSpread = null;
         window.__scSpread(p);
       }
+      window.__ready = true;
       post({ t: 'ready' });
     }).catch(function(e) { post({ t: 'error', message: String(e && e.message || e) }); });
   } catch (err) {
