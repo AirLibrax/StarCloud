@@ -183,6 +183,8 @@ App 在「设置」页填入服务器地址并登录即可连接云端书架；�
 | `npm run typecheck --workspace @starcloud/reader` | Web 阅读端类型检查 |
 | `npm run typecheck --workspace @starcloud/mobile` | App 类型检查 |
 | `npm run typecheck --workspace @starcloud/shared` | 共享包类型检查 |
+| `npm run lint` | ESLint 全仓检查（质量护栏：拦截死代码与低级错误） |
+| `npm run lint:fix` | ESLint 检查并自动修复可修复项 |
 | `npm run seed --workspace @starcloud/server` | 初始化默认管理员 |
 
 ## 部署（概要）
