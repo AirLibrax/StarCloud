@@ -73,12 +73,14 @@
 
 ## 四、单双列（spread）
 
-- 视口宽度 >900px（SPREAD_MIN_WIDTH，平板横屏/桌面）才允许双列，
-  且以用户选择为准（twoUp state）；
-- ≤768px 窄屏（手机竖屏）强制单列并隐藏切换按钮；
+- 视口 ≥768px 且横向占优（`min-width:768px and (orientation: landscape)`，
+  SPREAD_MIN_WIDTH=768，平板横屏/桌面）才允许双列，且以用户选择为准（twoUp state）；
+  原 900px 门槛对真实平板过高（1280x800@DPR1.6 横屏 CSS 视口约 800px），已下调；
+- 未达门槛（手机竖屏等）强制单列并隐藏切换按钮；
 - 滑动翻页模式的桌面端强制单列 + 按钮禁用 ∅（见上）;
-- 监听 window resize 与 matchMedia('(orientation: landscape)')，
-  容器尺寸变化时调用 rendition.resize() 重排。
+- 监听 window resize 与 matchMedia(WIDE_SPREAD_MQ) 的 change 事件，
+  容器尺寸变化时调用 rendition.resize() 重排；引擎内部 minSpreadWidth
+  与 UI 门槛同值（避免 768-799px 横屏显示「双列」却渲染单列）。
 
 ## 五、App 端（apps/mobile）对应关系
 
