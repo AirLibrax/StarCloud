@@ -320,18 +320,17 @@ export default function EpubViewer({
           minSpreadWidth: SPREAD_MIN_WIDTH,
         });
         renditionRef.current = localRendition;
+        // 注意：iframe 内部文档**不得**设置 overscroll-behavior（曾注入 none 导致
+        // PC 滚轮失效）——滚轮命中 iframe 后必须能经滚动链穿透到外层 stage 滚动容器
+        // （div#epubjs-container-*，overflow-y:scroll）才能滚动。下拉刷新已由
+        // stage 容器（.epub-container 规则）与主框架 html/body 的
+        // overscroll-behavior-y:none 双层阻断，无需（也不能）在 iframe 内再加
         localRendition.themes.register('paper', {
-          // 书页 iframe 内部文档同样禁止 overscroll 链穿透：连续滚动往回翻
-          // 滚到顶部时手势会透给外层页面触发浏览器下拉刷新，只改外层无效
-          html: {
-            'overscroll-behavior': 'none !important',
-          },
           body: {
             background: '#fbf7ee',
             'line-height': `${LINE_HEIGHTS[lineHeightRef.current]} !important`,
             'user-select': 'none !important',
             '-webkit-user-select': 'none !important',
-            'overscroll-behavior': 'none !important',
           },
           p: {
             'line-height': `${LINE_HEIGHTS[lineHeightRef.current]} !important`,
