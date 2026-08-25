@@ -2,8 +2,6 @@
 
 A self-hosted personal cloud library: keep your books on your own server, read them from any browser or phone app, and keep your reading progress in sync across devices.
 
-![Reader preview](docs/screenshots/reader.png)
-
 ## Features
 
 - **Read on any device** — web reader (TXT / PDF / EPUB) + Android app + admin console, all sharing the same interaction model
