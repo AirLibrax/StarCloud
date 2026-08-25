@@ -71,14 +71,29 @@ export class UsersService {
     return this.auth.toPublic(updated);
   }
 
-  /** 软删除：账号停用但记录保留，进度不丢 */
-  async deactivate(id: number, requesterId: number) {
-    await this.update(id, { isActive: false }, requesterId);
-    return { deactivated: id };
+  /** 硬删除：物理删除账号，阅读进度随外键级联清理，不可恢复 */
+  async remove(id: number, requesterId: number) {
+    if (id === requesterId) {
+      throw new ForbiddenException('不能删除自己的账号');
+    }
+    const target = await this.prisma.user.findUnique({ where: { id } });
+    if (!target) throw new NotFoundException('用户不存在');
+
+    await this.prisma.user.delete({ where: { id } });
+    return { deleted: id };
   }
 
   /** 自己修改自己的密码 */
-  async changePassword(userId: number, oldPassword: string, newPassword: string) {
+  async changePassword(
+    userId: number,
+    oldPassword: string,
+    newPassword: string,
+    confirmPassword: string,
+  ) {
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestException('两次输入的新密码不一致');
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('用户不存在');
 
@@ -90,5 +105,17 @@ export class UsersService {
       data: { passwordHash: await bcrypt.hash(newPassword, 10) },
     });
     return { changed: true };
+  }
+
+  /** 管理员直接重置指定用户的密码（不校验旧密码） */
+  async resetPassword(id: number, newPassword: string) {
+    const target = await this.prisma.user.findUnique({ where: { id } });
+    if (!target) throw new NotFoundException('用户不存在');
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+    });
+    return { reset: id };
   }
 }

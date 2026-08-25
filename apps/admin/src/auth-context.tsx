@@ -7,8 +7,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { UserPublic } from '@starcloud/shared';
-import { clearSession, getStoredUser } from './api/client';
+import type { LoginResponse, UserPublic } from '@starcloud/shared';
+import { clearSession, getStoredUser, storeSession } from './api/client';
 
 /**
  * 认证上下文：登录状态放这里，
@@ -16,8 +16,10 @@ import { clearSession, getStoredUser } from './api/client';
  */
 const AuthContext = createContext<{
   user: UserPublic | null;
+  /** 登录成功后必须调用：写会话并同步更新 context，否则本帧内 user 仍为 null */
+  login: (session: LoginResponse) => void;
   logout: () => void;
-}>({ user: null, logout: () => {} });
+}>({ user: null, login: () => {}, logout: () => {} });
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -36,6 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  const login = useCallback((session: LoginResponse) => {
+    storeSession(session);
+    setUser(session.user);
+  }, []);
+
   const logout = useCallback(() => {
     clearSession();
     setUser(null);
@@ -43,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [navigate]);
 
   return (
-    <AuthContext.Provider value={{ user, logout }}>
+    <AuthContext.Provider value={{ user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

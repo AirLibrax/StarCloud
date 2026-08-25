@@ -3,6 +3,7 @@ export interface UserPublic {
   id: number;
   username: string;
   isAdmin: boolean;
+  isActive: boolean;
   createdAt: string;
 }
 

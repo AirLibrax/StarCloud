@@ -1,4 +1,11 @@
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
@@ -35,6 +42,17 @@ export class ChangePasswordDto {
   @IsString()
   oldPassword!: string;
 
+  @IsString()
+  @MinLength(4, { message: '新密码至少 4 位' })
+  newPassword!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: '确认新密码不能为空' })
+  confirmPassword!: string;
+}
+
+/** 管理员重置用户密码：只收新密码，不校验旧密码 */
+export class ResetPasswordDto {
   @IsString()
   @MinLength(4, { message: '新密码至少 4 位' })
   newPassword!: string;

@@ -15,4 +15,16 @@ export class CreateBookDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  /** 上传时可选指定分类（multipart 文本字段） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  category?: string;
+
+  /** 上传时可选指定标签：逗号分隔字符串，如 "玄幻,连载" */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  tags?: string;
 }

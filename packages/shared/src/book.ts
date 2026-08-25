@@ -9,6 +9,9 @@ export interface Book {
   volume: number | null;
   author: string | null;
   description: string | null;
+  category: string | null;
+  /** 标签名列表（多对多） */
+  tags: string[];
   coverImage: string | null;
   fileType: BookFileType;
   fileSize: number | null;

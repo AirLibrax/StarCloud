@@ -59,10 +59,12 @@ label {
 }
 
 input,
+select,
 button {
   font-family: inherit;
 }
-input {
+input,
+select {
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0.45rem 0.6rem;
@@ -70,7 +72,8 @@ input {
   background: #fffdf7;
   color: var(--ink);
 }
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -106,6 +109,27 @@ input:focus {
   opacity: 0.55;
   cursor: default;
 }
+label.btn-file {
+  display: inline-block;
+  cursor: pointer;
+  margin: 0;
+}
+label.btn-file input {
+  display: none;
+}
+
+.upload-results {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+}
+.upload-results li.ok {
+  color: var(--green);
+}
+.upload-results li.fail {
+  color: var(--danger);
+}
 
 /* ---- 主页面 ---- */
 .page {
@@ -130,6 +154,37 @@ input:focus {
   gap: 0.7rem;
   font-size: 0.88rem;
   color: var(--ink-light);
+}
+
+/* ---- 左上角页签 ---- */
+.tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.tab {
+  display: inline-block;
+  padding: 0.45rem 1.1rem 0.5rem;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: rgba(83, 125, 150, 0.04);
+  color: var(--ink-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.tab:hover {
+  background: rgba(83, 125, 150, 0.09);
+  color: var(--accent-dark);
+}
+.tab.active {
+  background: var(--card);
+  color: var(--accent-dark);
+  font-weight: 500;
+  border-color: var(--line);
+  position: relative;
+  margin-bottom: -1px;
+  padding-bottom: calc(0.5rem + 1px);
 }
 
 .card {
@@ -220,6 +275,70 @@ tr:last-child td {
 .tag-txt {
   background: rgba(74, 107, 74, 0.1);
   color: var(--green);
+}
+.tag-chip {
+  display: inline-block;
+  margin-right: 4px;
+  margin-bottom: 2px;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  background: rgba(83, 125, 150, 0.12);
+  color: var(--accent-dark);
+}
+
+.edit-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  align-items: center;
+}
+.edit-form .edit-wide {
+  grid-column: 1 / -1;
+}
+.tag-admin {
+  background: rgba(83, 125, 150, 0.12);
+  color: var(--accent-dark);
+}
+.tag-user {
+  background: rgba(106, 97, 88, 0.1);
+  color: var(--ink-muted);
+}
+.tag-active {
+  background: rgba(74, 107, 74, 0.1);
+  color: var(--green);
+}
+.tag-inactive {
+  background: rgba(139, 44, 31, 0.08);
+  color: var(--danger);
+}
+
+.check-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.check-label input {
+  width: auto;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.reset-form {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+.reset-form input {
+  /* 表格操作列较窄，给输入框保底宽度，避免被 flex 挤压到点不中/打不进字 */
+  min-width: 180px;
+  flex: 1;
 }
 
 .error-box {

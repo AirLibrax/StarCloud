@@ -1,10 +1,12 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { LoginResponse } from '@starcloud/shared';
-import { api, storeSession } from '../api/client';
+import { api } from '../api/client';
+import { useAuth } from '../auth-context';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      storeSession(session);
+      login(session);
       navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');

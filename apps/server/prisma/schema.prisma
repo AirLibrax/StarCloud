@@ -27,6 +27,7 @@ model Book {
   volume      Int?
   author      String?
   description String?
+  category    String?
   coverImage  String?
   filePath    String
   fileType    String // pdf | epub | txt，见 @starcloud/shared 的 BookFileType
@@ -35,8 +36,16 @@ model Book {
   uploaderId  Int?
   uploader    User?     @relation(fields: [uploaderId], references: [id])
   progress    ReadingProgress[]
+  tags        Tag[] // implicit m2m：Prisma 自动建 _BookToTag 联结表
 
   @@index([title])
+}
+
+/** 书籍标签：name 唯一，与 Book 多对多（SQLite 下用关系表而非标量数组） */
+model Tag {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  books Book[]
 }
 
 model ReadingProgress {
