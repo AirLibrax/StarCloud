@@ -9,7 +9,6 @@
     "android": {
       "package": "com.airlibrax.starcloud",
       "versionCode": 2,
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
         "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
@@ -26,6 +25,14 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],

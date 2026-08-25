@@ -16,6 +16,7 @@
     "@react-navigation/native-stack": "^7.18.9",
     "expo": "^57.0.16",
     "expo-asset": "~57.0.14",
+    "expo-build-properties": "~57.0.14",
     "expo-document-picker": "~57.0.1",
     "expo-file-system": "~57.0.5",
     "expo-splash-screen": "~57.0.8",
