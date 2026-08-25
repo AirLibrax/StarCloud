@@ -60,14 +60,19 @@
    - 翻页方向设置：「向左下一页」（默认）/「向右下一页」
 2. **滑动翻页（swipe）**
    - 轴向二选一：左右滑动 / 上下滑动
-   - 左右滑动：横滑手势判定 |dx|>50 且 (dx>0)===(方向为 left-next)
-     即下一页（公式与 Web EpubViewer 逐字一致）；此模式下同样显示
-     「翻页方向」子选项（与 tap 语义相同）
-   - 上下滑动：无缝滚动，滚到底自动接下一章（TXT 为 ScrollView
-     连续滚动，EPUB 为 flow=scrolled + manager=continuous 连续渲染，
-     与 Web 映射表一致）
-   - 上下滑动无任何子选项（单页翻动样式已从交互规格删除，见
-     docs/reader-interaction.md 第八节，不得再实现）
+   - 左右滑动：横滑手势判定取位移主轴 —— |dy|>|dx| 时纵向手势恒定
+     （上推 dy<-50 = 下一页，下拉 dy>50 = 上一页，不随方向偏好镜像）；
+     否则 |dx|>50 且 (dx>0)===(方向为 left-next) 即下一页
+     （公式与 Web EpubViewer 逐字一致）；此模式下同样显示「翻页方向」子选项
+   - 上下滑动显示「滚动样式」子选项（VerticalStyle）二选一：
+     - **无缝滚动（continuous，默认）**：TXT 为 ScrollView 连续滚动，
+       EPUB 为 flow=scrolled + manager=continuous 连续渲染
+       （与 Web 映射表一致），滚到底自动接下一章
+     - **单页翻动（paged）**：TXT 为逐页渲染 + 纵滑手势判定
+       （上推=下一页/下拉=上一页）；EPUB 为 paginated flow +
+       axis='vertical'（epubjs default manager 运行时原生能力）+
+       书页 pointer-events:none，手势由宿主文档纵向位移判定；
+       页码体系与左右滑动/点击翻页一致（章节页码）
 
 ### F6 性能要求
 
