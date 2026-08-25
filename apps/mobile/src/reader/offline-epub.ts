@@ -12,6 +12,15 @@
  *   （与 Web 相同的映射表），整章连成一条无缝滚动、滚到底自动接下一章，
  *   引擎原生滚动，无桥接。
  * 键盘通道不需要（纯触屏）。
+ *
+ * 单列/双列（与 Web EpubViewer 同源语义）：
+ * - renderOptions.spread 动态化：RN 算好的 twoUp ∩ WebView 内横屏占优
+ *   → 'always'，否则 'none'；minSpreadWidth 恒为 SPREAD_MIN_WIDTH（UI 门槛与
+ *   引擎 divisor=2 判定阈值一致，防 768-799px 死按钮）；
+ * - 旋转/偏好变化跨过门槛时，RN 回注 __scSpread() 让 rendition.spread() 原地重排
+ *   （不重建 WebView）；原地重排抛错或未生效时上报 spread-failed，RN 侧退化为
+ *   重建 WebView 并按注入的 spine 索引恢复位置（restoreIndex）；
+ * - swipe+vertical 轴向（含 continuous）强制单列，不参与双列。
  */
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -24,6 +33,11 @@ const vendorAssets = {
 
 /** 桥接 JS 的手势触发阈值（px），与 Web 端 EpubViewer 的 SWIPE_THRESHOLD 一致 */
 const BRIDGE_SWIPE_THRESHOLD = 50;
+
+/** 双列生效的视口宽度门槛（逻辑像素），与 Web 端 EpubViewer 的 SPREAD_MIN_WIDTH 一致；
+ *  同时作为 epubjs 的 minSpreadWidth：引擎内部 divisor=2 判定阈值必须与 UI 门槛一致，
+ *  否则横屏 768-799px 会显示「双列」却渲染单列（死按钮） */
+export const SPREAD_MIN_WIDTH = 768;
 
 let vendorCache: { jszip: string; epub: string } | null = null;
 
@@ -54,6 +68,10 @@ export interface OfflineReaderOptions {
   swipeLayout: SwipeLayout;
   /** 上下滑动滚动样式（shared.VerticalStyle；仅 swipe+vertical 时有意义） */
   verticalStyle: VerticalStyle;
+  /** 双列是否生效（RN 侧已按 偏好 ∩ 横屏≥768 && width>height ∩ 非竖向滚动 计算好） */
+  twoUp: boolean;
+  /** 可选：重建 WebView 时恢复到的 spine 章节索引（缺省按 initialPercentage 恢复） */
+  restoreIndex?: number;
 }
 
 /**
@@ -105,6 +123,8 @@ window.__lineHeight = ${opts.lineHeight};
 window.__pageMode = "${opts.pageMode}";
 window.__swipeLayout = "${opts.swipeLayout}";
 window.__verticalStyle = "${opts.verticalStyle}";
+window.__twoUp = ${opts.twoUp};
+window.__restoreIndex = ${opts.restoreIndex ?? -1};
 function post(msg) { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
 window.__chunks = [];
 window.__pushChunk = function(c) { window.__chunks.push(c); };
@@ -113,17 +133,45 @@ window.__scNav = function(d) {
   if (!window.__rendition) return;
   if (d === 'next') window.__rendition.next(); else window.__rendition.prev();
 };
+/* 单双列热切换入口：RN 在旋转/偏好变化时回注（injectJavaScript），
+   rendition.spread() 原地重排，不重建 WebView（与 Web EpubViewer 同路径）。
+   书未打开时暂存 pending，__openBook 就绪后补应用；spread 抛错或未生效时
+   上报 spread-failed，RN 侧退化为重建 WebView 并按 spine 索引恢复位置。 */
+window.__lastSpread = null;
+window.__pendingSpread = null;
+window.__scSpread = function(mode) {
+  window.__twoUp = mode === 'always';
+  if (window.__lastSpread === mode) return;
+  if (!window.__rendition) { window.__pendingSpread = mode; return; }
+  try {
+    window.__rendition.spread(mode, ${SPREAD_MIN_WIDTH});
+    window.__lastSpread = mode;
+    window.__pendingSpread = null;
+    if (window.__rendition.settings && window.__rendition.settings.spread !== mode) {
+      post({ t: 'spread-failed', message: 'spread not applied' });
+    }
+  } catch (e) {
+    window.__pendingSpread = null;
+    post({ t: 'spread-failed', message: String(e && e.message || e) });
+  }
+};
 window.__openBook = function() {
   try {
     var b64 = window.__chunks.join('');
     var book = ePub(b64, { encoding: 'base64' });
     var isScroll = ${isVerticalContinuous ? 'true' : 'false'};
     var isPaged = ${isVerticalPaged ? 'true' : 'false'};
+    // 双列 = RN 算好的 twoUp ∩ WebView 内横屏占优（双保险；引擎另有 minSpreadWidth 门槛，
+    // 768 以下即使 'always' 也按 divisor=1 渲染单页，杜绝首帧闪变）
+    var isLandscape = window.innerWidth > window.innerHeight;
+    var spreadMode = (window.__twoUp && isLandscape) ? 'always' : 'none';
+    window.__lastSpread = spreadMode;
     var renderOpts = {
       width: '100%', height: '100%',
       flow: isPaged ? 'paginated' : (isScroll ? 'scrolled' : 'paginated'),
       manager: isScroll ? 'continuous' : 'default',
-      spread: 'none'
+      spread: spreadMode,
+      minSpreadWidth: ${SPREAD_MIN_WIDTH}
     };
     // axis:'vertical' 单页翻动为 epubjs default manager 运行时原生能力
     // （与 Web EpubViewer 相同的映射表：仅 paged 注入 axis）
@@ -181,9 +229,18 @@ window.__openBook = function() {
     });
     book.ready.then(function() {
       var t = book.spine.items.length;
-      var start = Math.min(t - 1, Math.floor(window.__initialPct / 100 * t));
+      // 重建恢复优先用注入的 spine 索引（保持当前章节位置），否则按历史百分比
+      var start = window.__restoreIndex >= 0
+        ? Math.min(window.__restoreIndex, t - 1)
+        : Math.min(t - 1, Math.floor(window.__initialPct / 100 * t));
       return rendition.display(start > 0 ? start : 0);
     }).then(function() {
+      // 加载期收到的热切换请求补应用（__scSpread 内部与已生效模式去重）
+      if (window.__pendingSpread) {
+        var p = window.__pendingSpread;
+        window.__pendingSpread = null;
+        window.__scSpread(p);
+      }
       post({ t: 'ready' });
     }).catch(function(e) { post({ t: 'error', message: String(e && e.message || e) }); });
   } catch (err) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, Pressable, useWindowDimensions } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { WebView } from 'react-native-webview';
 import { PanGestureHandler, State, type PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
@@ -20,7 +20,7 @@ import {
   type ReadingPrefs,
 } from '../storage/reading-prefs';
 
-import { buildOfflineEpubHtml } from '../reader/offline-epub';
+import { buildOfflineEpubHtml, SPREAD_MIN_WIDTH } from '../reader/offline-epub';
 
 type Route = RouteProp<RootStackParamList, 'Reader'>;
 
@@ -48,6 +48,16 @@ export default function ReaderScreen() {
   const [prefs, setPrefs] = useState(getReadingPrefs());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pageInfo, setPageInfo] = useState<{ page: number; total: number } | null>(null);
+
+  /** 窗口尺寸（旋转时更新；逻辑像素，与 Web 端 SPREAD_MIN_WIDTH 同单位） */
+  const { width, height } = useWindowDimensions();
+  /** 横屏且宽度达双列门槛（width>height 且 ≥768px） */
+  const landscapeWide = width > height && width >= SPREAD_MIN_WIDTH;
+  /** 上下滑动轴向强制单列（与 Web verticalLocked 一致；仅 swipe 模式生效，
+   *  tap 模式下轴向残留值不得压制双列） */
+  const verticalLocked = prefs.pageMode === 'swipe' && prefs.swipeLayout === 'vertical';
+  /** 实际生效的双列 = 偏好 ∩ 横屏门槛 ∩ 非上下滑动（与 Web twoUp 公式对齐） */
+  const twoUp = prefs.spreadTwoUp === 'two-up' && landscapeWide && !verticalLocked;
 
   function patchPrefs(patch: Parameters<typeof updateReadingPrefs>[0]) {
     updateReadingPrefs(patch).then(() => setPrefs(getReadingPrefs()));
@@ -239,6 +249,31 @@ export default function ReaderScreen() {
                 </View>
               </View>
             )}
+
+            {/* 单双列排版：仅 EPUB 横屏达门槛且非上下滑动轴向时显示（竖屏隐藏而非禁用，
+                与 Web 一致）；TXT 无双列渲染，不显示此行 */}
+            {fileType === 'epub' && landscapeWide && !verticalLocked && (
+              <View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ color: colors.textLight, fontSize: 13 }}>单双列</Text>
+                  <Text style={{ color: colors.accentDark, fontSize: 13 }}>
+                    {prefs.spreadTwoUp === 'two-up' ? '双列' : '单列'}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <SegmentBtn
+                    label="单列"
+                    active={prefs.spreadTwoUp === 'single'}
+                    onPress={() => patchPrefs({ spreadTwoUp: 'single' })}
+                  />
+                  <SegmentBtn
+                    label="双列"
+                    active={prefs.spreadTwoUp === 'two-up'}
+                    onPress={() => patchPrefs({ spreadTwoUp: 'two-up' })}
+                  />
+                </View>
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -250,6 +285,7 @@ export default function ReaderScreen() {
           localId={localId}
           initialPercentage={initialPercentage}
           prefs={prefs}
+          twoUp={twoUp}
           onProgress={onProgress}
         />
       )}
@@ -365,6 +401,7 @@ function EpubLoader({
   localId,
   initialPercentage,
   prefs,
+  twoUp,
   onProgress,
 }: {
   source: 'cloud' | 'local';
@@ -372,6 +409,8 @@ function EpubLoader({
   localId?: string;
   initialPercentage: number;
   prefs: ReadingPrefs;
+  /** 实际生效的双列（父组件已按 偏好 ∩ 横屏≥768 ∩ 非上下滑动 算好） */
+  twoUp: boolean;
   onProgress: (page: number, total: number) => void;
 }) {
   const [fileUri, setFileUri] = useState<string | null>(null);
@@ -416,6 +455,7 @@ function EpubLoader({
       bookKey={`b${bookId ?? localId}`}
       initialPercentage={initialPercentage}
       prefs={prefs}
+      twoUp={twoUp}
       onProgress={onProgress}
     />
   );
@@ -426,35 +466,56 @@ function EpubPane({
   bookKey,
   initialPercentage,
   prefs,
+  twoUp,
   onProgress,
 }: {
   fileUri: string;
   bookKey: string;
   initialPercentage: number;
   prefs: ReadingPrefs;
+  /** 实际生效的双列（父组件已按 偏好 ∩ 横屏≥768 ∩ 非上下滑动 算好） */
+  twoUp: boolean;
   onProgress: (page: number, total: number) => void;
 }) {
   const webRef = useRef<WebView>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('正在准备渲染引擎…');
+  /** WebView 内书籍是否就绪（收到 ready 消息）；HTML 换入即失效 */
+  const readyRef = useRef(false);
+  /** 最近上报的 spine 章节索引（spread 原地重排失败重建时用于恢复位置） */
+  const lastIdxRef = useRef<number | null>(null);
+
+  /** 生成阅读页 HTML（restoreIdx 非空时按 spine 索引恢复位置，否则按 initialPercentage） */
+  async function buildHtml(restoreIdx: number | null): Promise<string> {
+    return buildOfflineEpubHtml({
+      fileUri,
+      initialPercentage,
+      fontSizePct: FONT_STEPS[prefs.fontStep],
+      lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
+      marginPx: MARGINS[prefs.marginIdx],
+      pageMode: prefs.pageMode,
+      swipeLayout: prefs.swipeLayout,
+      verticalStyle: prefs.verticalStyle,
+      twoUp,
+      restoreIndex: restoreIdx ?? undefined,
+    });
+  }
+
+  /** 换入新 HTML：WebView 重新加载，就绪标记失效 */
+  function applyHtml(h: string) {
+    readyRef.current = false;
+    setHtml(h);
+  }
 
   // 组装自包含阅读页 HTML（引擎内联；书数据由 RN 分块推送）
   useEffect(() => {
     let cancelled = false;
     setHtml(null);
+    readyRef.current = false;
     (async () => {
       try {
-        const h = await buildOfflineEpubHtml({
-          fileUri,
-          initialPercentage,
-          fontSizePct: FONT_STEPS[prefs.fontStep],
-          lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
-          marginPx: MARGINS[prefs.marginIdx],
-          pageMode: prefs.pageMode,
-          swipeLayout: prefs.swipeLayout,
-          verticalStyle: prefs.verticalStyle,
-        });
+        const h = await buildHtml(null);
         if (!cancelled) setHtml(h);
       } catch (err) {
         if (!cancelled)
@@ -475,20 +536,20 @@ function EpubPane({
       firstStyle.current = false;
       return;
     }
-    buildOfflineEpubHtml({
-      fileUri,
-      initialPercentage,
-      fontSizePct: FONT_STEPS[prefs.fontStep],
-      lineHeight: LINE_HEIGHTS[prefs.lineHeightIdx],
-      marginPx: MARGINS[prefs.marginIdx],
-      pageMode: prefs.pageMode,
-      swipeLayout: prefs.swipeLayout,
-      verticalStyle: prefs.verticalStyle,
-    }).then((h) => {
-      if (!cancelledRef.current) setHtml(h);
+    buildHtml(null).then((h) => {
+      if (!cancelledRef.current) applyHtml(h);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [styleKey]);
+
+  // 旋转/偏好变化导致双列状态切换：回注 __scSpread 让 rendition.spread() 原地重排
+  // （不重建 WebView，与 Web EpubViewer 同路径）；未就绪时由 ready 消息兜底注入
+  useEffect(() => {
+    if (!readyRef.current) return;
+    webRef.current?.injectJavaScript(
+      `window.__scSpread && window.__scSpread(${twoUp ? "'always'" : "'none'"});true;`,
+    );
+  }, [twoUp]);
 
   const cancelledRef = useRef(false);
   useEffect(() => {
@@ -527,7 +588,24 @@ function EpubPane({
         pushBookData();
         return;
       }
-      if (msg.t === 'progress') onProgress(msg.page, msg.total);
+      if (msg.t === 'progress') {
+        lastIdxRef.current = msg.page - 1;
+        onProgress(msg.page, msg.total);
+      }
+      if (msg.t === 'ready') {
+        readyRef.current = true;
+        // 就绪后以当前双列状态兜底对齐（覆盖加载期发生的旋转/偏好变化，
+        // __scSpread 内部与已生效模式去重，重复注入零开销）
+        webRef.current?.injectJavaScript(
+          `window.__scSpread && window.__scSpread(${twoUp ? "'always'" : "'none'"});true;`,
+        );
+      }
+      if (msg.t === 'spread-failed') {
+        // 原地重排在 WebView 中不可靠：退化为重建 WebView，并按当前章节索引恢复位置
+        buildHtml(lastIdxRef.current).then((h) => {
+          if (!cancelledRef.current) applyHtml(h);
+        });
+      }
       if (msg.t === 'error') setError(msg.message);
       // 手势桥接：桥接 JS 只报原始手势，语义判定统一在 RN 侧（消费 shared 模型）
       if (msg.t === 'tap') {

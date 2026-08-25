@@ -30,7 +30,7 @@ export interface ReadingPrefs {
   swipeLayout: SwipeLayout; // 滑动翻页轴向（仅 pageMode==='swipe'）
   verticalStyle: VerticalStyle; // 上下滑动滚动样式（仅 swipe+vertical）
   swipeDirection: SwipeDirection;
-  spreadTwoUp: SpreadTwoUp; // App 暂未实现双列渲染，仅与 Web 键对应持久化
+  spreadTwoUp: SpreadTwoUp; // 双列偏好（与 Web 键对应持久化；实际生效还需横屏≥768 且非上下滑动轴向）
 }
 
 const DEFAULTS: ReadingPrefs = {
