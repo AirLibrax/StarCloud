@@ -9,7 +9,7 @@
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | `apps/server` 后端 API | ✅ 完成 | 认证 / 书籍 / 进度 / 用户管理，SQLite 单文件存储 |
-| `apps/admin` 管理后台 | ✅ 完成 | 登录、书籍上传（PDF / EPUB / TXT）、列表、删除、读者数 |
+| `apps/admin` 管理后台 | ✅ 完成 | 登录、用户管理（创建/编辑/停用/删除/重置密码）、书籍上传与编辑（PDF / EPUB / TXT）、分类/标签/搜索、封面管理、批量操作 |
 | `apps/reader` Web 阅读端 | ✅ 完成 | TXT / PDF / EPUB 三格式；阅读交互体系已按冻结规格实现（见 [docs/reader-interaction.md](docs/reader-interaction.md)） |
 | `apps/mobile` 安卓 App | ✅ 完成（第一版） | Expo + RN；本地导入 + 云端书架 + 离线 EPUB/TXT；交互已对齐 shared 模型（见 [docs/mobile-spec.md](docs/mobile-spec.md)）；平板横屏双列排版已支持；待办：PDF 离线 |
 | 部署配置 | ⏳ 暂未完成 | 生产部署脚本与 HTTPS 配置待补充 |
@@ -23,16 +23,17 @@ StarCloud/
 ├── apps/
 │   ├── server/          ✅ 后端 API（NestJS 11 + Prisma 6 + SQLite）
 │   │   ├── src/
-│   │   │   ├── auth/        登录、JWT 签发、认证与管理员守卫
-│   │   │   ├── books/       书籍上传（multipart）、下载、删除；
-│   │   │   │                EPUB 元数据解析（封面 / 书名 / 卷数）
+│   │   │   ├── auth/        登录、自助注册（可选邀请码门禁）、JWT 签发、认证与管理员守卫
+│   │   │   ├── books/       书籍上传（multipart）/ 编辑 / 分类标签 / 搜索 / 封面管理 /
+│   │   │   │                批量删除；EPUB 元数据解析（封面 / 书名 / 卷数）
 │   │   │   ├── progress/    阅读进度上报与「我的书架」聚合查询
-│   │   │   ├── users/       用户管理（管理员）与改密
+│   │   │   ├── users/       用户管理（管理员）与自助改密
 │   │   │   ├── prisma/      数据库客户端单例（全局模块）
 │   │   │   └── types/       Express 类型扩充
 │   │   └── prisma/
-│   │       ├── schema.prisma    数据模型（User / Book / ReadingProgress）
-│   │       └── seed.ts          默认管理员种子脚本
+│   │       ├── schema.prisma    数据模型（User / Book / Tag / ReadingProgress）
+│   │       ├── seed.ts          初始管理员种子脚本（读取 admins.json）
+│   │       └── admins.example.json  管理员凭据模板（复制为 admins.json 后使用）
 │   │
 │   ├── admin/           ✅ 管理后台（Vite 7 + React 19 + TypeScript）
 │   │   └── 构建产物由后端托管，部署后与 API 同域
@@ -80,10 +81,12 @@ Web 与 App 不各自硬编码：
       │  HTTP + JSON（Authorization: Bearer <JWT>）
       ▼
 NestJS 后端（端口 3000）
-  ├─ AuthModule     POST /api/auth/login · GET /api/auth/me
-  ├─ BooksModule    GET/POST/DELETE /api/books · GET /api/books/:id/download
+  ├─ AuthModule     POST /api/auth/login · POST /api/auth/register · GET /api/auth/registration · GET /api/auth/me
+  ├─ BooksModule    GET/POST/PATCH/DELETE /api/books · GET /api/books/:id/download
+  │                 POST/DELETE /api/books/:id/cover · POST /api/books/batch-delete
   ├─ ProgressModule POST /api/progress · GET /api/shelf
   ├─ UsersModule    GET/POST/PATCH/DELETE /api/users · POST /api/users/change-password
+  │                 POST /api/users/:id/reset-password
   ├─ 托管 /uploads 静态文件与 admin/dist（生产环境全站一个进程）
   └─ Prisma → SQLite（apps/server/prisma/data/starcloud.db）
 ```
@@ -105,7 +108,9 @@ NestJS 后端（端口 3000）
 - **移动端离线 EPUB**：epubjs / JSZip 打包资产内联进 WebView 骨架页，书文件由
   RN 分块推送 base64 后直接以 base64 编码模式解压（不走 XHR，无 data: URI 限制）；
   手势桥接只上报原始手势，翻页语义统一在 RN 侧按 shared 模型判定。
-- **软删除**：用户停用为标记位，阅读记录保留；删书时进度随外键级联清理。
+- **账号删除为硬删除**：删除用户时阅读记录随外键级联清理、上传者引用置空；
+  「停用」（isActive 标记位）作为不删数据的软手段保留，两者并存。
+  删书时进度随外键级联清理，封面与书文件同步清理不留孤儿。
 
 ## 技术栈
 
@@ -123,12 +128,19 @@ NestJS 后端（端口 3000）
 ```bash
 npm install                      # 安装全部工作区依赖
 
-# 首次初始化数据库（apps/server/.env 可自定义 DATABASE_URL / JWT_SECRET）
+# 首次初始化数据库与管理员
 cd apps/server
+cp .env.example .env             # 创建配置文件（Windows 用 copy）
+#   ↓ 编辑 .env：至少把 JWT_SECRET 换成自己的随机串
 npx prisma migrate dev           # 创建数据库表
-npm run seed                     # 创建默认管理员（SEED_ADMIN_NAME / SEED_ADMIN_PASSWORD）
+cp prisma/admins.example.json prisma/admins.json
+#   ↓ 编辑 admins.json：写入初始管理员的用户名与密码（支持多个，JSON 数组）
+npm run seed                     # 按 admins.json 创建初始管理员（幂等可重复执行）
 cd ../..
 ```
+
+> `seed` 只认 `prisma/admins.json`（已 gitignore）。文件缺失、JSON 损坏或条目缺字段时
+> 会报错拒跑并提示复制模板，代码内不含任何默认账号。
 
 启动后端（端口 3000）：
 
@@ -150,24 +162,74 @@ npm run dev:mobile               # expo start --lan
 ```
 
 App 在「设置」页填入服务器地址并登录即可连接云端书架；不配置服务器也能
-纯本地导入并阅读图书。
+纯本地导入并阅读图书。设置页与重新登录页均提供「注册」入口，逻辑与 Web 端一致。
+
+### 配置说明
+
+后端所有配置集中在 `apps/server/.env`（不入库，仓库提供 `.env.example` 模板）：
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `DATABASE_URL` | ✅ | SQLite 文件路径，相对 `prisma/` 目录，默认 `file:./data/starcloud.db` |
+| `JWT_SECRET` | ✅ | JWT 签名密钥；生产环境必须换成长随机串，泄露等于任何人可伪造登录态 |
+| `INVITE_CODE` | ❌ | 注册口令门禁开关，见下节「注册口令（可选）」；留空即关闭 |
+
+初始管理员凭据存放在 `apps/server/prisma/admins.json`（不入库，仓库提供
+`admins.example.json` 模板），格式为 JSON 数组，支持一次声明多个初始管理员：
+
+```json
+[
+  { "username": "管理员A", "password": "至少4位密码" },
+  { "username": "管理员B", "password": "另一个密码" }
+]
+```
+
+> 安全约定：`.env` 与 `admins.json` 均被 gitignore，真实凭据永不进仓库；
+> 两者的模板文件（`.env.example` / `admins.example.json`）入库供复制。
+
+### 注册口令（可选）
+
+自助注册接口默认对所有人开放；如需限制注册，可在 `apps/server/.env` 中配置一个邀请码：
+
+```env
+# 非空 = 启用注册门禁：注册请求必须携带匹配的 inviteCode，否则 403
+INVITE_CODE="star2026"
+```
+
+- **启用**：设置非空 `INVITE_CODE` 后重启后端即可；阅读端注册表单会自动出现「注册口令」输入框
+  （前端通过公开接口 `GET /api/auth/registration` 探测是否需要，该接口只返回
+  `{ inviteCodeRequired: boolean }`，不会泄露口令本身）。
+- **更换口令**：修改 `INVITE_CODE` 的值并重启后端，旧口令立即失效。
+- **关闭**：将值留空（`INVITE_CODE=""`）或删除该行并重启，注册不再校验，阅读端输入框自动消失。
+- **彻底卸载**：删除 `.env` 中的 `INVITE_CODE` 行即可，无需改动任何代码
+  （校验与开关逻辑集中在 `apps/server/src/auth/invite-gate.ts` 一个文件中）。
+
+> 该门禁只作用于自助注册（`POST /api/auth/register`）；管理员在用户管理页创建用户不受影响。
 
 ## API 一览
 
 | 方法 | 路径 | 权限 | 说明 |
 |------|------|------|------|
 | POST | `/api/auth/login` | 公开 | 登录，返回 JWT 与用户信息 |
+| POST | `/api/auth/register` | 公开 | 自助注册（启用邀请码门禁时需携带 `inviteCode`），成功即登录 |
+| GET | `/api/auth/registration` | 公开 | 注册配置：是否需要邀请码（不泄露口令） |
 | GET | `/api/auth/me` | 登录 | 当前用户信息 |
-| GET | `/api/books` | 登录 | 书籍列表（含读者数） |
+| GET | `/api/books?q=&category=` | 登录 | 书籍列表（含读者数、分类、标签）；`q` 对书名/作者模糊搜索，`category` 精确过滤 |
 | GET | `/api/books/:id` | 登录 | 书籍详情 |
 | GET | `/api/books/:id/download` | 登录 | 下载文件（支持 query token） |
-| POST | `/api/books` | 管理员 | 上传新书（multipart，字段名 `file`，上限 100MB） |
-| DELETE | `/api/books/:id` | 管理员 | 删除书籍及其文件 |
+| POST | `/api/books` | 管理员 | 上传新书（multipart，字段名 `file`，上限 100MB；可选 `category`/`tags` 逗号分隔） |
+| PATCH | `/api/books/:id` | 管理员 | 编辑元数据（书名/卷数/作者/简介/分类/标签，标签整体替换） |
+| POST | `/api/books/:id/cover` | 管理员 | 上传/替换封面（png/jpeg/webp，上限 10MB） |
+| DELETE | `/api/books/:id/cover` | 管理员 | 移除封面并删除文件 |
+| POST | `/api/books/batch-delete` | 管理员 | 批量删除（事务内清理文件与进度，返回 deleted/skipped） |
+| DELETE | `/api/books/:id` | 管理员 | 删除书籍及其文件与封面 |
 | POST | `/api/progress` | 登录 | 上报/更新阅读进度 |
 | GET | `/api/shelf` | 登录 | 我的书架（书籍 + 个人进度） |
 | GET/POST | `/api/users` | 管理员 | 用户列表 / 创建用户 |
-| PATCH/DELETE | `/api/users/:id` | 管理员 | 修改 / 停用用户 |
-| POST | `/api/users/change-password` | 登录 | 修改自己的密码 |
+| PATCH | `/api/users/:id` | 管理员 | 修改用户名 / 权限 / 停用启用 |
+| DELETE | `/api/users/:id` | 管理员 | 删除用户（硬删除，进度级联清理；不能删除自己） |
+| POST | `/api/users/:id/reset-password` | 管理员 | 管理员直接设定某用户新密码 |
+| POST | `/api/users/change-password` | 登录 | 修改自己的密码（需旧密码验证） |
 
 ## 常用命令
 
@@ -194,6 +256,13 @@ App 在「设置」页填入服务器地址并登录即可连接云端书架；�
 3. 服务器上运行 `node apps/server/dist/main.js`，一个进程承载 API、
    管理后台静态文件、封面与书籍文件
 4. 反向代理（nginx/caddy）配 HTTPS；SQLite 数据库与 uploads 目录定期备份
+
+**上线前安全清单**：
+
+- [ ] `.env` 的 `JWT_SECRET` 已换成长随机串（不是模板默认值）
+- [ ] `prisma/admins.json` 已创建且口令不是模板示例值
+- [ ] 决定是否启用注册口令（公网实例建议启用，见「注册口令（可选）」）
+- [ ] 确认 `.env` 与 `admins.json` 未被意外提交进 git
 
 > 详细的生产部署文档暂未完成。
 
