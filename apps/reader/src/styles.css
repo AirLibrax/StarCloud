@@ -14,6 +14,16 @@
   box-sizing: border-box;
 }
 
+/* 主框架全链禁 overscroll：Chrome 下拉刷新由主框架视口 overscroll 触发，
+   html 上设置即禁用视口刷新手势；再从根到阅读器逐层截断滚动链 */
+html,
+body,
+#root,
+.reader-page,
+.epub-viewer {
+  overscroll-behavior-y: none;
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -345,6 +355,10 @@ input:focus {
   overflow: hidden;
   /* 与书页主题背景同色，边距区域和内容浑然一体 */
   background: #fbf7ee;
+  /* 此 class 同时落在宿主 div 与 epubjs 内层 stage 滚动容器
+     （div#epubjs-container-*，continuous 模式 inline overflow-y:scroll 的滚动宿主）上；
+     overscroll 链在滚动宿主处即被截断，不再穿透到主框架视口触发下拉刷新 */
+  overscroll-behavior-y: none;
 }
 /* 点击翻页模式：书页对一切指针事件透明（含 iframe），
    引擎收不到事件就不会有内置翻页，点击统一由外层判定 */
