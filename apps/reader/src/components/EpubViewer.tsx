@@ -161,9 +161,12 @@ export default function EpubViewer({
 
   /** 桌面滑动翻页：固定上下无缝滚动 + 强制单列（规格二/四） */
   const desktopSwipe = pageMode === 'swipe' && !isTouch;
-  /** 实际生效的单列/双列 = 用户偏好 ∩ 视口宽度 ∩ 非桌面滑动 ∩ 非上下轴向
-   *  （上下滑动连续/单页翻动均为纵向排版，不使用横向双列） */
-  const twoUp = twoUpPref && isWide && !desktopSwipe && swipeLayout !== 'vertical';
+  /** 上下滑动轴向强制单列（仅 swipe 模式有意义；tap 模式下轴向残留值不得影响双列） */
+  const verticalLocked = pageMode === 'swipe' && swipeLayout === 'vertical';
+  /** 实际生效的单列/双列 = 用户偏好 ∩ 视口宽度 ∩ 非桌面滑动 ∩ 非上下滑动
+   *  （上下滑动连续/单页翻动均为纵向排版，不使用横向双列；
+   *   轴向压制必须以 pageMode==='swipe' 为前提，防 localStorage 残留值跨模式泄漏） */
+  const twoUp = twoUpPref && isWide && !desktopSwipe && !verticalLocked;
 
   /* ---- refs：渲染期与 state 严格同步（规格七.4），
      —— 一次性初始化的 effect / 事件处理一律读 ref，保证重建拿到最新配置 ---- */
@@ -450,7 +453,7 @@ export default function EpubViewer({
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!readyRef.current || !rendition) return;
-    // twoUpRef 已含全部规则（偏好 ∩ 视口宽度 ∩ 桌面滑动强制单列）
+    // twoUpRef 已含全部规则（偏好 ∩ 视口宽度 ∩ 非桌面滑动/上下滑动）
     const nextSpread = twoUpRef.current ? 'always' : 'none';
     if (rendition.settings?.spread !== nextSpread) {
       rendition.spread(nextSpread, SPREAD_MIN_WIDTH);
@@ -504,10 +507,11 @@ export default function EpubViewer({
   applyDocHandlersRef.current = applyDocHandlers;
 
   /** 切换单列/双列偏好；窄屏（未达双列门槛）只改偏好，不应用；
-   *  上下滑动轴向固定单列（同桌面滑动），此状态下禁止切换与写盘 */
+   *  swipe+上下滑动轴向固定单列（同桌面滑动），此状态下禁止切换与写盘；
+   *  轴向压制以 pageMode==='swipe' 为前提，tap 模式不受轴向残留值影响 */
   function toggleSpread() {
     if (!ready || desktopSwipe) return;
-    if (swipeLayoutRef.current === 'vertical') return;
+    if (pageModeRef.current === 'swipe' && swipeLayoutRef.current === 'vertical') return;
     const next = !twoUpPref;
     setTwoUpPref(next);
     localStorage.setItem(SPREAD_KEY, next ? 'two-up' : 'single');
@@ -665,23 +669,23 @@ export default function EpubViewer({
                 : '')}
         </span>
         <div className="toolbar-right">
-          {/* 单列/双列排版切换：仅达标横屏显示；桌面滑动与上下滑动模式禁用显示 ∅ */}
+          {/* 单列/双列排版切换：仅达标横屏显示；桌面滑动与 swipe+上下滑动禁用显示 ∅ */}
           {isWide && (
             <button
               className="btn spread-btn"
               onClick={toggleSpread}
-              disabled={!ready || desktopSwipe || swipeLayout === 'vertical' || spreadSwitching}
+              disabled={!ready || desktopSwipe || verticalLocked || spreadSwitching}
               title={
                 desktopSwipe
                   ? '桌面滑动翻页固定为上下连续滚动，强制单列'
-                  : swipeLayout === 'vertical'
+                  : verticalLocked
                     ? '上下滑动模式为单列排版'
                     : spreadSwitching
                       ? '切换中…'
                       : '单列/双列排版'
               }
             >
-              {desktopSwipe || swipeLayout === 'vertical' ? '∅' : twoUp ? '双列' : '单列'}
+              {desktopSwipe || verticalLocked ? '∅' : twoUp ? '双列' : '单列'}
             </button>
           )}
           <button
