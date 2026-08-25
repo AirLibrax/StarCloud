@@ -284,6 +284,8 @@ input:focus {
   /* 阅读器整体禁止文本选择：快速点击翻页不会被误识别为双击选取 */
   user-select: none;
   -webkit-user-select: none;
+  /* 书页滚动链的 overscroll 手势不穿透外层页面（防下拉刷新/边缘导航） */
+  overscroll-behavior: none;
 }
 .segment-group {
   display: flex;

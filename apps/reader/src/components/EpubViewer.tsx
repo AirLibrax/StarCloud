@@ -321,11 +321,17 @@ export default function EpubViewer({
         });
         renditionRef.current = localRendition;
         localRendition.themes.register('paper', {
+          // 书页 iframe 内部文档同样禁止 overscroll 链穿透：连续滚动往回翻
+          // 滚到顶部时手势会透给外层页面触发浏览器下拉刷新，只改外层无效
+          html: {
+            'overscroll-behavior': 'none !important',
+          },
           body: {
             background: '#fbf7ee',
             'line-height': `${LINE_HEIGHTS[lineHeightRef.current]} !important`,
             'user-select': 'none !important',
             '-webkit-user-select': 'none !important',
+            'overscroll-behavior': 'none !important',
           },
           p: {
             'line-height': `${LINE_HEIGHTS[lineHeightRef.current]} !important`,
