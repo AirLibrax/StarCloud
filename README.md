@@ -179,7 +179,10 @@ App 在「设置」页填入服务器地址并登录即可连接云端书架；�
 | `npm run dev:mobile` | Expo 开发服务器（dev-client） |
 | `npm run build` | 构建全部含 build 脚本的工作区（server / admin / reader） |
 | `npm run typecheck --workspace @starcloud/server` | 后端类型检查 |
+| `npm run typecheck --workspace @starcloud/admin` | 管理后台类型检查 |
+| `npm run typecheck --workspace @starcloud/reader` | Web 阅读端类型检查 |
 | `npm run typecheck --workspace @starcloud/mobile` | App 类型检查 |
+| `npm run typecheck --workspace @starcloud/shared` | 共享包类型检查 |
 | `npm run seed --workspace @starcloud/server` | 初始化默认管理员 |
 
 ## 部署（概要）

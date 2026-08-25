@@ -15,6 +15,14 @@
     "dev:admin": "npm run dev --workspace @starcloud/admin",
     "dev:reader": "npm run dev --workspace @starcloud/reader",
     "dev:mobile": "npm run start --workspace @starcloud/mobile",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }

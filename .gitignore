@@ -20,6 +20,8 @@ uploads/
 
 # 临时文件目录
 _tmp/
+.npm-cache/
+.pnpm-store/
 
 # 系统杂项
 .DS_Store
