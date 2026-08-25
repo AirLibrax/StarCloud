@@ -11,7 +11,9 @@
 2. 行间距 —— 4 档滑块（LINE_HEIGHTS：1.4/1.6/1.8/2.0）
 3. 左右边距 —— 4 档滑块（窄/中/宽/很宽 = MARGINS）
 4. 翻页方式 —— 二选一：**点击翻页 | 滑动翻页**（PageMode）
-5. 条件子项（见下文各端规则）
+5. 条件子项（见下文各端规则）：滑动翻页显示「滑动轴向」；
+   轴向为上下时再显示「滚动样式」（无缝滚动/单页翻动）；
+   点击翻页或左右滑动显示「翻页方向」
 
 工具栏布局：`[← 书架] ……章节进度…… [单列|双列] [⚙]`
 单双列切换**只在工具栏**，设置面板内不得出现重复入口。
@@ -44,10 +46,18 @@
     `isNext = (dx > 0) === (swipeDirection === 'left-next')`，
     dx > 50px 才触发；
   - 同样带「翻页方向」子选项，语义同 tap；
+  - **纵向手势（无论方向偏好恒定）**：同一手势判定中取位移主轴，
+    |dy| > |dx| 且 dy < -50px（从下往上推）= 下一页；
+    dy > 50px（从上往下滑）= 上一页；
 - **上下滑动（swipe + vertical）**：
-  - flow=scrolled 无缝连续滚动，整章连成一条，滚到底自动接下一章；
-  - **没有子选项**（单页翻动样式已删除，不得再实现）；
-  - 书页保持可交互以启用原生滚动；
+  - 子选项「滚动样式」（VerticalStyle）二选一：
+    - **continuous 无缝滚动**：flow=scrolled 无缝连续滚动，
+      整章连成一条，滚到底自动接下一章；书页保持可交互启用原生滚动；
+    - **paged 单页翻动**：paginated flow + axis='vertical'
+      （epubjs default manager 运行时原生能力）；
+      从下往上推 = 下一页、从上往下滑 = 上一页，一页一页翻动；
+      页码体系与左右滑动/点击翻页一致（同属 paginated 渲染）；
+      书页 pointer-events:none，手势由外层容器纵向位移判定；
 - **桌面降级规则**：非触屏设备选择滑动翻页时——
   自动切为上下无缝滚动 + **强制单列** +
   工具栏单双列按钮变为禁用状态显示「∅」（悬停提示说明原因）。
@@ -95,6 +105,7 @@ Web localStorage 键名（App AsyncStorage 一一对应）：
 | starcloud.margin | 边距档位序号 |
 | starcloud.pageMode | 'tap' \| 'swipe' |
 | starcloud.swipeLayout | 'horizontal' \| 'vertical' |
+| starcloud.verticalStyle | 'continuous' \| 'paged'（仅上下滑动时有意义） |
 | starcloud.swipeDirection | 'left-next' \| 'right-next' |
 | starcloud.spreadTwoUp | 'single' \| 'two-up' |
 
@@ -118,6 +129,7 @@ Web localStorage 键名（App AsyncStorage 一一对应）：
 
 ## 八、已删除项（不得复活）
 
-- 单页滑动样式（VerticalStyle paged）
 - 三角区/倒 Y 三区点击分区（现为左右两半）
 - 设置面板内的单双列入口（只在工具栏）
+- 注：VerticalStyle paged（单页翻动）曾于早期版本删除，后于 2026-08-25
+  恢复为上下滑动模式的子选项，定义见第二节，非删除项
