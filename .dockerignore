@@ -1,0 +1,46 @@
+# ============================================================
+# 构建上下文排除：保持镜像小、不泄漏密钥与本机数据
+# ============================================================
+
+# Git 元数据
+.git
+.gitignore
+
+# 依赖（根目录与各子包）
+node_modules
+**/node_modules
+
+# 本地缓存与临时目录
+.npm-cache
+_tmp
+
+# 构建产物（容器内重新构建，本机 dist 不进上下文）
+dist
+**/dist
+
+# 本机上传的书籍文件 / 封面（生产数据走卷挂载）
+apps/server/uploads
+**/uploads
+
+# 本地开发数据库（路径含本机信息，严禁入镜像；生产库由迁移+卷生成）
+**/prisma/data
+**/*.db
+**/*.db-journal
+
+# 文档与许可（不影响构建）
+docs
+README.md
+LICENSE
+
+# 移动端整体排除，仅保留 package.json（npm 工作区同步需要）
+apps/mobile/*
+!apps/mobile/package.json
+
+# 环境变量与生产数据（含密钥，严禁入镜像）
+.env
+**/.env
+deploy/.env
+deploy/data
+
+# 日志
+*.log

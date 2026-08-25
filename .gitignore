@@ -26,6 +26,9 @@ _tmp/
 .npm-cache/
 .pnpm-store/
 
+# 生产部署运行时数据（deploy/data 下：数据库、上传文件、证书）
+deploy/data/
+
 # 系统杂项
 .DS_Store
 Thumbs.db

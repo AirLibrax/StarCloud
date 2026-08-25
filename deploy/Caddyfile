@@ -1,0 +1,36 @@
+# ============================================================================
+# StarCloud Caddy 配置
+#
+# 【唯一需要修改的地方】：deploy/.env 里的 CADDY_DOMAIN
+#   （Caddyfile 通过 {$CADDY_DOMAIN} 读取环境变量，不用改本文件）
+#
+# 前提：该域名已把 A 记录解析到本服务器公网 IP，且 80/443 端口放行。
+# Caddy 会自动申请并续期 Let's Encrypt 证书（首个请求会等几秒 ~ 一分钟）。
+#
+# 路由设计（reader 与后端同域，API 无 CORS 问题）：
+#   /        -> reader SPA 静态文件（SPA fallback 到 index.html）
+#   /api/*   -> 反代 starcloud:3000（登录、书架、进度、下载……）
+#   /uploads/* -> 反代 starcloud:3000（封面图 / 静态文件）
+#
+# 管理后台不在此域名下：NestJS 同时托管 admin/dist，只监听
+# 127.0.0.1:3000，通过 SSH 隧道访问（见 docs/deploy.md）。
+# ============================================================================
+
+{$CADDY_DOMAIN} {
+	# ---- API 与上传文件：反代到后端容器（服务名=主机名） ----
+	handle /api/* {
+		reverse_proxy starcloud:3000
+	}
+
+	handle /uploads/* {
+		reverse_proxy starcloud:3000
+	}
+
+	# ---- reader SPA：静态文件 + 单页回退 ----
+	handle {
+		root * /srv
+		encode gzip zstd
+		try_files {path} /index.html
+		file_server
+	}
+}

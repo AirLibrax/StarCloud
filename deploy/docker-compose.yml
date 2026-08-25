@@ -1,0 +1,58 @@
+# ============================================================================
+# StarCloud 生产编排
+#
+#   starcloud: 后端（NestJS + SQLite）。数据落在 deploy/data/ 下两个挂载卷：
+#     deploy/data/db      -> /app/apps/server/prisma/data   （数据库文件）
+#     deploy/data/uploads -> /app/apps/server/uploads       （书籍与封面）
+#   端口仅绑定 127.0.0.1:3000：管理后台与后端仅本机可达（SSH 隧道访问），
+#   不对外暴露，公网唯一入口是 caddy。
+#
+#   caddy:      官方 Caddy 镜像为底座，内置 reader 静态产物（SPA），
+#               自动 HTTPS（Let's Encrypt），/api 与 /uploads 反代到 starcloud。
+#
+# 使用（在仓库根目录）：
+#   cp deploy/.env.example deploy/.env   # 修改 JWT_SECRET / 管理员 / CADDY_DOMAIN
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# ============================================================================
+
+services:
+  starcloud:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: starcloud:latest
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data/db:/app/apps/server/prisma/data
+      - ./data/uploads:/app/apps/server/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  caddy:
+    build:
+      context: ..
+      dockerfile: deploy/caddy.Dockerfile
+    image: starcloud-caddy:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # 从 deploy/.env 读取（Caddyfile 里以 {$CADDY_DOMAIN} 引用）
+      CADDY_DOMAIN: ${CADDY_DOMAIN}
+    volumes:
+      # Caddyfile 改完无需重建镜像，重载配置即可：
+      #   docker compose -f deploy/docker-compose.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 证书与 ACME 状态持久化（Let's Encrypt 续期、重启不重复签发）
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config
+    depends_on:
+      - starcloud
+    restart: unless-stopped
