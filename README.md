@@ -4,7 +4,7 @@
 
 个人云端图书馆：在服务器上存放书籍，在任何设备的浏览器或手机 App 中阅读，阅读进度跨设备同步。
 
-![阅读器效果预览](docs/reader-preview.jpg)
+![阅读器效果预览](docs/screenshots/reader.png)
 
 ## 功能特性
 
@@ -29,11 +29,7 @@
 
 ## 界面预览
 
-| | |
-|---|---|
-| ![书架](docs/screenshots/shelf.png) | ![阅读器（双列 + 排版设置）](docs/screenshots/reader.png) |
-| ![管理后台：书籍管理](docs/screenshots/admin-books.png) | ![管理后台：用户管理](docs/screenshots/admin-users.png) |
-| ![登录页](docs/screenshots/login.png) | |
+![阅读器（双列排版 + 章页进度 + 设置面板）](docs/screenshots/reader.png)
 
 ## 快速开始
 
@@ -190,7 +186,7 @@ StarCloud/
 │   ├── reader-interaction.md         阅读交互冻结规格（翻页/轴向/方向/双列的权威定义）
 │   ├── mobile-spec.md                App 规格（三端对齐、离线方案、双列）
 │   ├── deploy.md                     生产部署全流程（Docker 安装→配置→启动→备份→排障）
-│   └── reader-preview.jpg            效果预览图
+│   └── screenshots/            界面截图（reader.png）
 │
 ├── Dockerfile                        部署用的后端镜像定义（与 deploy/ 配合）
 ├── .dockerignore                     构建上下文排除（node_modules、dist、.git、数据）

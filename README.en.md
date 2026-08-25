@@ -352,14 +352,6 @@ Production topology: one `starcloud` container (API + admin console + book files
 - [ ] Decide whether to enable the invite-code gate (recommended for public instances)
 - [ ] Confirm `.env` and `admins.json` were not accidentally committed
 
-## Screenshots
-
-| | |
-|---|---|
-| ![Shelf](docs/screenshots/shelf.png) | ![Reader with two-column layout and settings](docs/screenshots/reader.png) |
-| ![Admin: book management](docs/screenshots/admin-books.png) | ![Admin: user management](docs/screenshots/admin-users.png) |
-| ![Login](docs/screenshots/login.png) | |
-
 ## Documentation index
 
 | Doc | Content |
