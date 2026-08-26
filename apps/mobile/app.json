@@ -3,7 +3,7 @@
     "name": "StarCloud",
     "slug": "starcloud",
     "version": "2.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "light",
     "icon": "./assets/images/icon.png",
     "android": {
@@ -23,7 +23,7 @@
         {
           "backgroundColor": "#FBEFE0",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 350,
+          "imageWidth": 400,
           "resizeMode": "contain"
         }
       ],
