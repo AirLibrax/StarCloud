@@ -32,3 +32,6 @@ deploy/data/
 # 系统杂项
 .DS_Store
 Thumbs.db
+
+# 签名密钥（本地备份于 D:/AgentHana/keystore-backup/）
+*.jks
